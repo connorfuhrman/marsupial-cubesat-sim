@@ -1,0 +1,13 @@
+{
+    "site_package_search_strategy": "pep561",
+    "source_directories": [
+	"."
+    ],
+    "strict": false, 
+    "search_path": [
+	{"site-package": "matplotlib"},
+	{"site-package": "numpy"},
+	{"site-package": "shortuuid"},
+	{"site-package": "DSRC"}
+    ]
+}

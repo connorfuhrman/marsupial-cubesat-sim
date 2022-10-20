@@ -10,10 +10,18 @@ def _all_equal(iterable):
     return next(g, True) and not next(g, False)
 
 
+_iter = 0
+
+
 def _update_plot(frame_num: int, entities: dict, lines: list):
+    global _iter
+    _iter += 1
     for line, entity in zip(lines, entities.values()):
-        pos = entity["position"][frame_num]
-        line.set_data_3d(*pos)
+        if len(entity["position"]) > _iter:
+            pos = entity["position"][frame_num]
+            line.set_data_3d(*pos)
+        else:
+            line.set(alpha=0.0)
     return lines
 
 
@@ -25,12 +33,8 @@ def entrypoint(entities: dict):
     """
     if len(entities) == 0:
         raise ValueError("Got empty dictionary of entities!")
-    # Get the total number of simulation timesteps
-    num_timesteps = [len(e["time"]) for e in entities.values()]
-    if not _all_equal(num_timesteps):
-        raise ValueError("The number of timesteps is inconsistent "
-                         f"in your dictionary: {num_timesteps}")
-    num_timesteps = num_timesteps[0]
+
+    max_num_iters = max([len(e["time"]) for e in entities.values()])
 
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
@@ -42,7 +46,7 @@ def entrypoint(entities: dict):
 
     ani = FuncAnimation(fig,                        # noqa F481: I know this is unused
                         _update_plot,
-                        num_timesteps,
+                        max_num_iters,
                         fargs=(entities, lines,))
 
     plt.show()
