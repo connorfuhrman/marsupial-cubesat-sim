@@ -10,6 +10,7 @@ from DSRC.simulation.spacecraft import (
 import numpy as np
 from scipy.stats import bernoulli
 from typing import Protocol
+from logging import Logger
 
 
 class Sample(Protocol):
@@ -38,10 +39,11 @@ class CubeSat(Spacecraft):
 
     def __init__(self,
                  loc: np.ndarray,
-                 fuel_level: float,
+                 fuel_capacity: float,
                  sample_prob: float,
+                 parentLogger: Logger,
                  *,
-                 is_deployed: bool = False,
+                 is_deployed: bool = True,
                  vel: np.ndarray = None,
                  rot_vel: np.ndarray = None,
                  ori: np.ndarray = None):
@@ -52,7 +54,7 @@ class CubeSat(Spacecraft):
         in the mothership
         """
         self._logger_name = "CubeSat"
-        super().__init__(loc, fuel_level, StraightLineAutopilot, vel, rot_vel,  ori)
+        super().__init__(loc, fuel_capacity, StraightLineAutopilot, parentLogger, vel, rot_vel,  ori)
         self._is_deployed = is_deployed
         self._dist = bernoulli(sample_prob)
 
@@ -67,6 +69,8 @@ class CubeSat(Spacecraft):
         If the cubesat was able to capture a sample
         it will be holding the sample's weight
         """
+        if not self.is_deployed:
+            raise RuntimeError("Cannot attempt sample capture when not deployed.")
         self._has_sample = bool(self._dist.rvs())
         if self.has_sample:
             self._sample = sample
@@ -82,3 +86,7 @@ class CubeSat(Spacecraft):
     @property
     def sample(self) -> Sample:  # noqa D
         return self._sample
+
+    @property
+    def is_deployed(self) -> bool:  # noqa D
+        return self._is_deployed

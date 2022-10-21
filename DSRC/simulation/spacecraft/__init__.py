@@ -5,3 +5,4 @@ from .autopilot import (
 )
 from .spacecraft import Spacecraft
 from .cubesat import CubeSat
+from .mothership import Mothership

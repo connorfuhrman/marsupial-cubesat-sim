@@ -5,8 +5,6 @@ import logging
 from shortuuid import uuid
 from copy import copy
 from typing import Union, Protocol
-from DSRC import logger_name
-from DSRC.simulation import logger_name as simulation_logger_name
 from DSRC.simulation.communication import (
     CommsSimManager,
     Message
@@ -43,6 +41,10 @@ class Autopilot(Protocol):
         """Get the next heading command."""
         raise NotImplementedError()
 
+    @property
+    def waypoints(self) -> list[np.ndarray]:
+        """Get the planned waypoints."""
+        raise NotImplementedError()
 
 
 class Spacecraft:
@@ -58,6 +60,8 @@ class Spacecraft:
     """Rotational velocity in [roll, pitch, yaw] in [rad/s]"""
     _autopilot: Autopilot
     """Autopilot module."""
+    _fuel_capacity: float
+    """How much fuel can this craft hold."""
     _fuel_level: float
     """Remaining fuel in arbitrary units."""
     _logger: logging.Logger
@@ -71,6 +75,7 @@ class Spacecraft:
                  loc: np.ndarray,
                  fuel_level: float,
                  autopilotClass: Autopilot,
+                 parentLogger: logging.Logger,
                  vel: np.ndarray = None,
                  rot_vel: np.ndarray = None,
                  ori: np.ndarray = None):
@@ -82,6 +87,7 @@ class Spacecraft:
         self._id = uuid()
         self._logger_name = "Spacecraft"
         self._fuel_level = fuel_level
+        self._fuel_capacity = fuel_level
 
         def assign_arr(val, attr, dtype=float, sz: int = 3):
             val = np.array(val, dtype=dtype)
@@ -92,28 +98,35 @@ class Spacecraft:
 
         assign_arr(loc, "_position")
         assign_arr(default() if vel is None else vel, "_velocity")
-        assign_arr(default() if rot_vel is None else rot_vel, "_rotational_velocity")
+        assign_arr(default() if rot_vel is None else rot_vel,
+                   "_rotational_velocity")
         assign_arr(default() if ori is None else ori, "_orientation")
 
-        self._logger = self._get_logger()
-        self._autopilot = autopilotClass(self._logger.name)
+        self._logger = logging.getLogger(f"{parentLogger.name}."
+                                         f"spacecraft.{self.id}")
+        self._autopilot = autopilotClass(self._logger)
         self._logger.debug("Constructed at position %s "
                            "with velocity %s "
                            "and orientation %s",
                            self.position, self.velocity, self.orientation)
 
-    def update_kinematics(self, dt: float, vel_mag: float = 1.0) -> None:
+    def update_kinematics(self, dt: float, vel_mag: float = 1.0) -> bool:
         """Update the kinematic state of the craft.
 
         The autopilot member is queried for the heading
         and the craft applies velocity in that heading with
         a magnitude of vel_mag which deaults to 1 m/s
+
+        If the function returns false then the craft has
+        run out of fuel and is now dead!.
         """
         heading = self._autopilot.update(self.position)
+        #self._logger.debug(f"heading is now {heading}")
         self._velocity = vel_mag * heading
         self._position += (dt * self.velocity)
         self._orientation += (dt * self._rotational_velocity)
         # TODO Update fuel level based on acceleration
+        return self.fuel_level > 0.0
 
     def apply_rot_vel(self, rot_vel: np.ndarray) -> None:
         """Apply some rotational velocity."""
@@ -167,39 +180,44 @@ class Spacecraft:
         if len(arr) != sz:
             raise ValueError("Invalid array size")
 
-    def _get_logger(self) -> logging.Logger:
-        """Get a logger for this class."""
-        return logging.getLogger(f"{logger_name}.{simulation_logger_name}"
-                                 f".{self._logger_name}.{self.id}")
-
     @property
     def position(self) -> np.ndarray:
         """Retrieve the current 3-space position."""
         self._check_arr_sz(self._position)
-        return copy(self._position)
+        return self._position.copy()
 
     @property
     def orientation(self) -> np.ndarray:
         """Retrieve the current orientation."""
         self._check_arr_sz(self._orientation)
-        return copy(self._orientation)
+        return self._orientation.copy()
 
     @property
     def velocity(self) -> np.ndarray:
         """Retrive the current velocity."""
         self._check_arr_sz(self._velocity)
-        return copy(self._velocity)
+        return self._velocity.copy()
 
     @property
     def rotational_velocity(self) -> np.ndarray:
         """Retrive the current rotational_velocity."""
         self._check_arr_sz(self._rotational_velocity)
-        return copy(self._rotational_velocity)
+        return self._rotational_velocity.copy()
 
     @property
     def fuel_level(self) -> float:
-        """Retrieve fuel capacity."""
+        """Retrieve fuel level."""
         return self._fuel_level
+
+    @property
+    def fuel_capacity(self) -> float:
+        """Retrieve the fuel capacity."""
+        return self._fuel_capacity
+
+    @property
+    def num_waypoints(self) -> float:
+        """Return the crafts waypoints."""
+        return self._autopilot.num_waypoints
 
     @property
     def id(self) -> str:

@@ -17,19 +17,22 @@ class StraightLineAutopilot:
     direction of the next waypoint to capture.
     """
 
-    _waypoints: Queue[np.ndarray] = Queue()
+    _waypoints: Queue[np.ndarray] = None
     """Waypoints to follow."""
-    _tracking_waypnt: np.ndarray = None
+    _tracking_waypnt: np.ndarray
     """The waypoint we're headed to."""
-    _waypoint_capture_tol: float = 1
+    _waypoint_capture_tol: float = 0.5
     """Distance away from a waypoint when it's considered captured [m]."""
-    _heading: np.ndarray = np.empty(3)
+    _heading: np.ndarray
     """The current heading command."""
     _logger: Logger
     """Logging facilities."""
 
-    def __init__(self, parent_logger_name: str):  # noqa D
-        self._logger = getLogger(f"{parent_logger_name}.autopilot")
+    def __init__(self, parent_logger: Logger):  # noqa D
+        self._logger = getLogger(f"{parent_logger.name}.autopilot")
+        self._heading = np.empty(3)
+        self._tracking_waypnt = None
+        self._waypoints = Queue()
 
     def add_waypoint(self, pnt: np.ndarray) -> None:
         """Add a waypoint to the path."""
@@ -46,8 +49,8 @@ class StraightLineAutopilot:
 
     def update(self, pos: np.ndarray) -> np.ndarray:
         """Calculate the velocity needed to reach the next waypoint."""
-        if self._waypoints.qsize() == 0:
-            self._heading = np.array([0, 0, 0], dtype=float)
+        if self._waypoints.qsize() == 0 and self._tracking_waypnt is None:
+            self._heading = np.zeros(3, dtype=float)
         elif self._tracking_waypnt is None:
             self._tracking_waypnt = self._waypoints.get()
             self._logger.info("There is not a waypoint being tracked. "
@@ -59,11 +62,14 @@ class StraightLineAutopilot:
             # Only if we've captured the tracking waypoint
             # should we calculate a new velocity vector
             self._logger.debug(f"Captured waypint at {self._tracking_waypnt}")
-            self._tracking_waypnt = self._waypoints.get()
-            if self._waypoints.empty():
-                self._logger.info("Current waypoint is the last in the sequence")
-            self._calc_heading(pos)
-            self._logger.debug(f"New heading is {self._heading}")
+            if self.num_waypoints == 0:
+                self._logger.debug("No more waypoints")
+                self._heading = np.zeros(3, dtype=float)
+                self._tracking_waypnt = None
+            else:
+                self._tracking_waypnt = self._waypoints.get()
+                self._calc_heading(pos)
+                self._logger.debug(f"New heading is {self._heading}")
         return self._heading
 
     def _waypoint_captured(self, pos: np.ndarray) -> bool:
@@ -74,3 +80,7 @@ class StraightLineAutopilot:
         """Calculate the new heading."""
         self._heading = self._tracking_waypnt - pos
         self._heading /= np.linalg.norm(self._heading)
+
+    @property
+    def num_waypoints(self) -> int:  # noqa D
+        return self._waypoints.qsize()
