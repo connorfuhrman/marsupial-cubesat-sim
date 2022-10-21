@@ -14,7 +14,6 @@ dataclasses-json==0.5.7
 decorator==5.1.1
 dill==0.3.5.1
 distlib==0.3.6
--e git+ssh://git@github.com/SpaceTREx-Lab/Decentralized-CubeSat-Sample-Return-using-VLC.git@2f41085c92d5051d1599bcf2599209c1ad0e25f7#egg=DSRC
 executing==1.1.1
 filelock==3.8.0
 flake8==4.0.1
