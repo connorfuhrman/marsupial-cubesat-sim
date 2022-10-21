@@ -3,3 +3,4 @@ shortuuid
 matplotlib
 scipy
 ray[core]
+tqdm
