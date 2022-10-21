@@ -41,7 +41,7 @@ def _update_plot(frame_num, datagetter, axs):
 def _get_plot_layout(nplots: int) -> tuple[int, int]:
     if nplots == 1:
         return 1, 1
-    elif (sqrt := np.sqrt(nplots)) % 2.0 == 0:
+    elif (sqrt := np.sqrt(nplots)) == round(sqrt):
         return int(sqrt), int(sqrt)
     else:
         return int(f := np.floor(sqrt)), int(nplots - f)
