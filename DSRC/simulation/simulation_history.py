@@ -13,6 +13,8 @@ class SimulationHistoryTimestep(TypedDict):
     """Mapping between Id and position at this timestep."""
     craft_types: dict[str, str]
     """Mapping between ID and string type."""
+    sample_positions: list[np.ndarray]
+    """All samples in the simulation at this time."""
 
 
 class SimulationHistoryMData(TypedDict):
@@ -20,6 +22,8 @@ class SimulationHistoryMData(TypedDict):
 
     max_num_crafts: int
     """The maximum number of crafts in the sim at one time."""
+    max_num_samples: int
+    """The maximum number of samples over all iters."""
     total_iters: int
     """How many iterations were completed."""
     craft_ids: set[str]

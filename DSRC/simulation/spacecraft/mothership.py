@@ -5,7 +5,7 @@ which can be deployed and docked.
 """
 
 
-from DSRC.simulation.spacecraft import Spacecraft
+from DSRC.simulation.spacecraft import Spacecraft, CubeSat
 from DSRC.simulation.spacecraft import StraightLineAutopilot
 from logging import Logger
 import numpy as np
@@ -54,9 +54,11 @@ class Mothership(Spacecraft):
         self._logger.debug("Deploying cubesat")
         self._num_docked_cubesats -= 1
 
-    def dock_cubesat(self, craft: Spacecraft) -> None:
+    def dock_cubesat(self, craft: CubeSat) -> None:
         """Dock the cubesat."""
         self._logger.debug("Cubesat %s docked", craft.id)
+        self._logger.info("Cubesat docked with %s g of sample with value %s",
+                          craft.sample_weight, sum([s.value for s in craft.samples]))
         self._num_docked_cubesats += 1
 
     @property

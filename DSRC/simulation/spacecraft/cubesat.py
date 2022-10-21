@@ -28,9 +28,7 @@ class Sample(Protocol):
 class CubeSat(Spacecraft):
     """A CubeSat for sample return."""
 
-    _has_sample: bool = False
-    """Does this cubesat have a valid sample?"""
-    _sample: Sample = None
+    _samples: list[Sample]
     """Hold the captured sample if one was collected."""
     _is_deployed: bool
     """Is this cubesat deployed or docked?"""
@@ -56,6 +54,8 @@ class CubeSat(Spacecraft):
         self._logger_name = "CubeSat"
         super().__init__(loc, fuel_capacity, StraightLineAutopilot, parentLogger, vel, rot_vel,  ori)
         self._is_deployed = is_deployed
+        self._has_sample = False
+        self._samples = []
         self._dist = bernoulli(sample_prob)
 
     def attempt_sample_capture(self, sample: Sample) -> bool:
@@ -71,21 +71,26 @@ class CubeSat(Spacecraft):
         """
         if not self.is_deployed:
             raise RuntimeError("Cannot attempt sample capture when not deployed.")
-        self._has_sample = bool(self._dist.rvs())
-        if self.has_sample:
-            self._sample = sample
-            self._logger.debug("Captured the sample!")
+        captured = bool(self._dist.rvs())
+        if captured:
+            self._samples.append(sample)
+            self._logger.debug("Captured the sample! This craft now holds %s grams of sample", self.sample_weight)
         else:
             self._logger.debug("Failed to capture sample :(")
-        return self.has_sample
+        return captured
 
     @property
     def has_sample(self) -> bool:  # noqa D
-        return self._has_sample
+        return len(self.samples) > 0
 
     @property
-    def sample(self) -> Sample:  # noqa D
-        return self._sample
+    def samples(self) -> list[Sample]:  # noqa D
+        return self._samples
+
+    @property
+    def sample_weight(self) -> float:
+        """The weight of all collected samples."""
+        return sum([s.weight for s in self.samples])
 
     @property
     def is_deployed(self) -> bool:  # noqa D

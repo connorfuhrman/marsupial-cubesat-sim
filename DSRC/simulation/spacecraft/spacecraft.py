@@ -105,7 +105,7 @@ class Spacecraft:
                            "and orientation %s",
                            self.position, self.velocity, self.orientation)
 
-    def update_kinematics(self, dt: float, vel_mag: float = 1.0) -> bool:
+    def update_kinematics(self, dtime, vel_mag: float = 1.0) -> bool:
         """Update the kinematic state of the craft.
 
         The autopilot member is queried for the heading
@@ -115,8 +115,8 @@ class Spacecraft:
         If the function returns false then the craft has
         run out of fuel and is now dead!.
         """
+        dt = float(dtime)  # In case this is passed as mpf
         heading = self._autopilot.update(self.position)
-        #self._logger.debug(f"heading is now {heading}")
         self._velocity = vel_mag * heading
         self._position += (dt * self.velocity)
         self._orientation += (dt * self._rotational_velocity)
@@ -127,13 +127,13 @@ class Spacecraft:
         """Apply some rotational velocity."""
         self._rotational_velocity += rot_vel
 
-    def add_waypoint(self, pnt: np.ndarray) -> None:
+    def add_waypoint(self, pnt: np.ndarray, front: bool = False) -> None:
         """Add a waypoint to the autopilot."""
-        self._autopilot.add_waypoint(pnt)
+        self._autopilot.add_waypoint(pnt, front)
 
     def clear_waypoints(self, stationary: bool = False) -> None:
         """Instruct the autopilot to clear all waypoints."""
-        self._autopilot.cleat_waypoints()
+        self._autopilot.clear_waypoints()
 
     def receive_msg(self, link, msg):
         """Get a message from another craft."""
@@ -210,9 +210,14 @@ class Spacecraft:
         return self._fuel_capacity
 
     @property
-    def num_waypoints(self) -> float:
+    def num_waypoints(self) -> int:
         """Return the crafts waypoints."""
         return self._autopilot.num_waypoints
+
+    @property
+    def curr_waypoint(self) -> np.ndarray:
+        """Return where we're currently navigating."""
+        return self._autopilot.curr_waypoint
 
     @property
     def id(self) -> str:
