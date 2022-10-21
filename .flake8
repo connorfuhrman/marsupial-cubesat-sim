@@ -1,0 +1,8 @@
+[flake8]
+extend-ignore = E501
+exclude =
+    .git,
+    __pycache__
+per-file-ignores =
+    __init__.py: F401
+max-complexity = 10
