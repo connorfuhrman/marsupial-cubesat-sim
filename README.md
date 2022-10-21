@@ -11,11 +11,11 @@ Simulations are available as Ray `Actor`s which effectuate arbitrary task parall
 **Note**: This is still under active development.
 
 ## QuickStart
-*This probably won't work. Please add any packages you had to install manually to `requirements.txt` and issue a PR*
+This repository is expected to be cross-platform as it is pure Python, however development is 
+conducted mainly on MacOS and Ubuntu using Python 3.10.6.
+Around Python 3.8 should work. 
 
-This repository is expected to be cross-platform as it is pure Python, however development is conducted mainly on MacOS and Ubuntu.
-
-```python
+```bash
 git clone git@github.com:SpaceTREx-Lab/Decentralized-CubeSat-Sample-Return-using-VLC.git repodir
 pip install -e repodir
 python repodir/DSRC/simulation/simulation.py [--num_workers=<n parallel sims>]

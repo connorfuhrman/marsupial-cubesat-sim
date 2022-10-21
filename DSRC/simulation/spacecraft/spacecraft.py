@@ -41,11 +41,6 @@ class Autopilot(Protocol):
         """Get the next heading command."""
         raise NotImplementedError()
 
-    @property
-    def waypoints(self) -> list[np.ndarray]:
-        """Get the planned waypoints."""
-        raise NotImplementedError()
-
 
 class Spacecraft:
     """A Spacecraft model."""
