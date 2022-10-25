@@ -556,7 +556,7 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
 
     updater = Updater()
 
-    max_to_launch = 5 * args.num_cubesats if args.num_workers == 1 else 15
+    max_to_launch = 15 # 5 * args.num_cubesats if args.num_workers == 1 else 15
 
     def ejector(time, samples, Plogger):
         if (
@@ -619,29 +619,31 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
 
     if args.num_workers > 1:
 
-        def make_actor(n):
+        def make_actor():
             _config = config.copy()
             _config["mothership_config"][0]["cubesat_capacity"] = np.random.randint(
-                3, 10
+                5, 20
             )
             return SimulationActor.remote(_config)
 
         ray.init()
         ncpus = int(ray.available_resources()['CPU'])
+        if ncpus == 1:
+            raise RuntimeError("You're trying to use Ray on a single-core machine! "
+                               "Set --num_workers=1 next time")
         sims_history = []
-        # Launch Ray workers in batches. This should probably be replaced
-        # in the future with ray.wait to wait on N refs then launch more
-        # so we're not wasting resources.
-        #
-        # https://docs.ray.io/en/latest/ray-core/package-ref.html#ray-wait-ref
+        # Manage remote workers
+        actors = [make_actor() for _ in range(ncpus)]
+        refs_to_actors = {a.run.remote(): a for a in actors}
         while len(sims_history) != args.num_workers:
-            if (nprocs_left := args.num_workers - len(sims_history)) < ncpus:
-                n_to_launch = nprocs_left
-            else:
-                n_to_launch = ncpus
-            print(f"Launching {n_to_launch} Ray tasks")
-            sims = [make_actor(n) for n in range(n_to_launch)]
-            sims_history.extend(ray.get([s.run.remote() for s in sims]))
+            ready, refs = ray.wait(list(refs_to_actors.keys()))
+            for ref in ready:
+                sims_history.append(ray.get(ref))
+                del refs_to_actors[ref]
+            if len(sims_history) + len(refs) < args.num_workers:
+                actor = make_actor()
+                refs_to_actors[actor.run.remote()] = actor
+
         if not args.no_animation:
             print(f"Animating {args.num_workers} simulations")
             animate_simulation(sims_history, args.mp4_file)
