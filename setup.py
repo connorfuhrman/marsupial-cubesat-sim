@@ -3,6 +3,11 @@
 from distutils.core import setup
 from setuptools import find_packages
 
+with open("./requirements.txt") as f:
+    reqs = [l for l in f.read().splitlines() if not l.startswith("#")]
+
+
+
 setup(
     name="DSRC",
     version="0.1",
@@ -10,4 +15,5 @@ setup(
     author="Connor Fuhramn",
     author_email="connorfuhrman@arizona.edu",
     packages=find_packages(),
+    install_requires=reqs,
 )

@@ -16,7 +16,6 @@ from shortuuid import uuid
 from typing import TypedDict
 import itertools
 from mpmath import mpf
-from queue import Queue
 
 
 class CubeSatConfig(TypedDict):
@@ -390,6 +389,9 @@ def _test():
     parser.add_argument(
         "--mp4_file", type=str, help="MP4 file to save the animation.", default=None
     )
+    parser.add_argument(
+        "--no_animation", help="Don't do an animation just run", action="store_true"
+    )
 
     args = parser.parse_args()
 
@@ -623,14 +625,16 @@ def _test():
         ncpus = resources["CPU"]
         sims = [make_actor(n) for n in range(args.num_workers)]
         sims_history = ray.get([s.run.remote() for s in sims])
-        print(f"Animating {args.num_workers} simulations")
-        animate_simulation(sims_history, args.mp4_file)
+        if not args.no_animation:
+            print(f"Animating {args.num_workers} simulations")
+            animate_simulation(sims_history, args.mp4_file)
     else:
         try:
             sim = Simulation(config)
             sim_history = sim.run()
-            print("Animating ...")
-            animate_simulation([sim_history], args.mp4_file)
+            if not args.no_animation:
+                print("Animating ...")
+                animate_simulation([sim_history], args.mp4_file)
         except Exception:
             import pdb, traceback, sys  # noqa E401
 
