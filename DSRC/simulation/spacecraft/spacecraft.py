@@ -4,7 +4,8 @@ import numpy as np
 import logging
 from shortuuid import uuid
 from copy import copy
-from typing import Union, Protocol
+from typing import Union, Protocol, Tuple
+from queue import Queue
 from DSRC.simulation.communication import (
     CommsSimManager,
     Message
@@ -59,6 +60,8 @@ class Spacecraft:
     """How much fuel can this craft hold."""
     _fuel_level: float
     """Remaining fuel in arbitrary units."""
+    _msg_queue: Queue[Tuple[float, Message]] = Queue()
+    """Received messages since the last timestep."""
     _logger: logging.Logger
     """Logging functionality."""
     _logger_name: str
@@ -135,13 +138,20 @@ class Spacecraft:
         """Instruct the autopilot to clear all waypoints."""
         self._autopilot.clear_waypoints()
 
-    def receive_msg(self, link, msg):
-        """Get a message from another craft."""
-        self._rx_msg_callback(msg)
+    def drop_curr_waypoint(self) -> None:
+        """Stop tracking the current waypoint."""
+        self._autopilot.drop_curr_waypoint()
 
-    def send_msg(self, manager: CommsSimManager, msg: Message, rx):
-        """Send a message to another craft."""
-        manager.send_msg(msg, rx, self)
+    def receive_msg(self, msg: Message, timestamp: float):
+        """Get a message from another craft."""
+        self._msg_queue.put((timestamp, msg))
+
+    def get_msg(self) -> Union[Tuple[float, Message], None]:
+        """Get the top of the queue or None if there's not msgs."""
+        if self.msg_queue_size == 0:
+            return None
+        else:
+            return self._msg_queue.get()
 
     def get_state_msg(self, time: float,
                       as_msg_obj: bool = False) -> Union[SpacecraftStateMsg, Message]:
@@ -162,14 +172,6 @@ class Spacecraft:
             return Message(msg)
         else:
             return msg
-
-    def _rx_msg_callback(self, msg: Message):
-        """Do something with a rx'd message.
-
-        This should be overriden in child classes
-        to actually do something with the message.
-        """
-        pass
 
     def _check_arr_sz(self, arr: np.array, sz: int = 3) -> None:
         if len(arr) != sz:
@@ -218,6 +220,11 @@ class Spacecraft:
     def curr_waypoint(self) -> np.ndarray:
         """Return where we're currently navigating."""
         return self._autopilot.curr_waypoint
+
+    @property
+    def msg_queue_size(self) -> int:
+        """The number of messages awaiting dispatch."""
+        return self._msg_queue.qsize()
 
     @property
     def id(self) -> str:

@@ -56,6 +56,14 @@ class StraightLineAutopilot:
             _ = self._waypoints.pop()
         self._tracking_waypnt = None
 
+    def drop_curr_waypoint(self) -> None:
+        """Stop tracking the current waypoint.
+
+        If there are waypoints left in the queue they will
+        be popped at the next planning phase.
+        """
+        self._tracking_waypnt = None
+
     def update(self, pos: np.ndarray) -> np.ndarray:
         """Calculate the velocity needed to reach the next waypoint."""
         # Copy to ensure no invalid references
@@ -71,7 +79,7 @@ class StraightLineAutopilot:
         elif self._waypoint_captured(pos):
             # Only if we've captured the tracking waypoint
             # should we calculate a new velocity vector
-            self._logger.debug(f"Captured waypint at {self._tracking_waypnt}")
+            self._logger.info("Captured waypint at %s", self._tracking_waypnt)
             if self.num_waypoints == 0:
                 self._logger.debug("No more waypoints")
                 self._heading = np.zeros(3, dtype=float)
@@ -86,7 +94,7 @@ class StraightLineAutopilot:
 
     def _waypoint_captured(self, pos: np.ndarray) -> bool:
         """Has the current waypoint been captured."""
-        return np.linalg.norm(self._tracking_waypnt - pos) < self._waypoint_capture_tol
+        return np.linalg.norm(self._tracking_waypnt - pos) <= self._waypoint_capture_tol
 
     def _calc_heading(self, pos: np.ndarray) -> None:
         """Calculate the new heading."""

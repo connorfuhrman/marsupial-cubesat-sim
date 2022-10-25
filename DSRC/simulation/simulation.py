@@ -3,6 +3,7 @@
 
 from DSRC.simulation.spacecraft import Spacecraft, CubeSat, Mothership
 from DSRC.simulation import SimulationHistoryTimestep, SimulationHistory, SimulationHistoryMData
+from DSRC.simulation.communication import CommsSimManager, Message
 from dataclasses import dataclass
 import numpy as np
 import logging
@@ -60,7 +61,7 @@ class SimulationConfig(TypedDict):
     """Callable which adds particles to the simulation."""
 
 
-@dataclass
+@dataclass(eq=False)
 class Sample:
     """Standin as a sample class for now."""
 
@@ -73,9 +74,15 @@ class Sample:
     velocity: np.ndarray = np.zeros(3)
     """Samples velocity in 3-space."""
 
-    def update_kinematics(self, dt: float) -> None:
+    def update_kinematics(self, dt: float, *args) -> None:
         """Update the position of the sample."""
         self.position += (float(dt) * self.velocity)
+
+    def __eq__(self, o):  # noqa D
+        return (self.weight == o.weight and \
+                self.value == o.value and \
+                np.array_equal(self.position, o.position) and \
+                np.array_equal(self.velocity, o.velocity))
 
 
 class Simulation:
@@ -89,7 +96,7 @@ class Simulation:
     """Class logger."""
     _id: str
     """UUID of this simulation."""
-    _crafts: set[Spacecraft] = set()
+    _crafts: dict[str, Spacecraft] = dict()
     """Crafts which exist in the simulation.
 
 
@@ -113,6 +120,8 @@ class Simulation:
     """The sim time."""
     _simdt: mpf
     """The simulation update period."""
+    _comms_manager: CommsSimManager = CommsSimManager()
+    """Object to manage simulated communications."""
     _planner: callable
     """Callable which performs planning for each craft."""
     _termiantor: callable
@@ -149,7 +158,7 @@ class Simulation:
                             ms_config['cubesat_capacity'],
                             self._logger,
                             ms_config['fuel_capacity'])
-            self._crafts.add(ms)
+            self._crafts[ms.id] = ms
             self._logger.debug("Added mothership %s as %s",
                                ms.id, ms.position)
             self._cubesat_configs[ms.id] = cs_config
@@ -158,7 +167,7 @@ class Simulation:
             'max_num_crafts': len(self.crafts),
             'max_num_samples': 0,
             'total_iters': 0,
-            'craft_ids': {c.id for c in self.crafts},
+            'craft_ids': set(self.crafts.keys()),
             'id': self.id,
         }
 
@@ -191,12 +200,19 @@ class Simulation:
         made to the crafts state in that return variable.
         """
         # Update the kinematics for all things in the simulation
-        for entity in itertools.chain(self._crafts, self._samples):
+        for entity in self.entities_iter:
             entity.update_kinematics(self.dt)
         # Run the planning step for all crafts
         # This should update their kinematic state (heading/velocity/rotational velocity),
         # perform sample capture, deploy more sample return crafts, or dock sample return crafts
-        self._crafts, self._samples = self._planner(self._crafts, self._samples, self.cubesat_configs, self._logger)
+        # Additionally, this step should return a list of messages which are sent between crafts via
+        # the CommsSimManager object.
+        self._crafts, msgs, self._samples = self._planner(self._crafts, self._samples, self.cubesat_configs, self._logger)
+        if msgs is not None:
+            for m in msgs:
+                if type(m) is not Message:
+                    m = Message(m)
+                self._comms_manager.send_msg(m, self.crafts[m.tx_id], self.crafts[m.rx_id])
         # Add any more samples to the simulation which were ejected
         # by some rubble-pile asteroid
         new_samps = self._particle_ejector(self.simtime, self.samples, self._logger)
@@ -205,16 +221,17 @@ class Simulation:
             self._logger.debug("Added new samples: %s", [s for s in new_samps])
             if self._metadata['max_num_samples'] < len(self._samples):
                 self._metadata['max_num_samples'] = len(self._samples)
-        self._metadata['craft_ids'] |= {c.id for c in self.crafts}
+        self._metadata['craft_ids'] |= set(self.crafts.keys())  # Update craft IDs
         if (nc := len(self.crafts)) > self._metadata['max_num_crafts']:
-            self._metadata['max_num_crafts'] = nc
+            self._metadata['max_num_crafts'] = nc  # Update max # of craft at one iter
         self._simtime += self.dt
+        self._comms_manager.update(self.simtime, self.dt)  # Update the comms simulation
         self._history.append(
             {
                 "time": self.simtime,
-                "craft_positions": {c.id: c.position for c in self.crafts},
+                "craft_positions": {c.id: c.position for c in self.crafts.values()},
                 "craft_types": {c.id: "CubeSat" if type(c) is CubeSat else "Mothership"
-                                for c in self.crafts},
+                                for c in self.crafts.values()},
                 "sample_positions": [s.position.copy() for s in self.samples]
             })
         self._metadata['total_iters'] += 1
@@ -224,17 +241,25 @@ class Simulation:
         return self._id
 
     @property
-    def crafts(self) -> set[Spacecraft]:
-        """Get all crafts in the simulation."""
+    def crafts(self) -> dict[str, Spacecraft]:
+        """Get all crafts in the simulation by their ID."""
         return self._crafts
 
     @property
-    def motherships(self) -> set[Mothership]:
+    def entities_iter(self):
+        """Return a chained iterator through all entities.
+
+        This includes the spacecrafts and the smaples.
+        """
+        return itertools.chain(self._crafts.values(), self._samples)
+
+    @property
+    def motherships(self) -> dict[str, Mothership]:
         """Get all the crafts which are motherships."""
         return self._get_crafts_by_type(Mothership)
 
     @property
-    def cubesats(self) -> set[CubeSat]:
+    def cubesats(self) -> dict[str, CubeSat]:
         """Get all the crafts which are cubesats."""
         return self._get_crafts_by_type(CubeSat)
 
@@ -259,7 +284,7 @@ class Simulation:
         return self._metadata['total_iters']
 
     def _get_crafts_by_type(self, T):  # noqa D
-        return {c for c in self.crafts if type(c) is T}
+        return {c.id: c for c in self.crafts if type(c) is T}
 
 
 @ray.remote
@@ -297,9 +322,30 @@ def _all_equal(iterable):
     return next(g, True) and not next(g, False)
 
 
+def _find_repeats(arr: np.ndarray) -> np.ndarray:
+    """Find indices of repeat values in an array.
+
+    Args:
+        arr (np.ndarray): An array to find repeat values in.
+
+    Returns:
+        np.ndarray: An array of indices into arr which are the values which
+            repeat.
+
+    From https://stackoverflow.com/a/67780952/10302537
+    """
+
+    arr_diff = np.diff(arr, append=[arr[-1] + 1])
+    res_mask = arr_diff == 0
+    arr_diff_zero_right = np.nonzero(res_mask)[0] + 1
+    res_mask[arr_diff_zero_right] = True
+    return np.nonzero(res_mask)[0]
+
+
 def _test():
     import argparse as ap
     from DSRC.simulation import animate_simulation
+    from DSRC.simulation.communication import messages as msgs
 
     parser = ap.ArgumentParser()
     parser.add_argument("--num_workers",
@@ -325,11 +371,17 @@ def _test():
 
     args = parser.parse_args()
 
+    class NoMoreSamples(Exception):
+        pass
+
     class Updater:
+        """An example of a centralized planner."""
+
         def __init__(self):
             self.iters = 0
             self.logger = None
             self.num_cubesats_deployed = 0
+            self.cubesat_sample_assignments = dict()
 
         def do_cubesat_deploy(self, mothership, crafts, config):
             offset = np.array([0, 0, 5 * (self.num_cubesats_deployed + 1)], dtype=float)
@@ -340,60 +392,118 @@ def _test():
             # for w in waypoints:
             #     cs.add_waypoint(w) # + np.random.normal(0, 0.25, size=3))
             # cs.add_waypoint(mothership.position)
-            crafts.add(cs)
+            crafts[cs.id] = cs
             mothership.deploy_cubesat()
             self.num_cubesats_deployed += 1
             return crafts
 
+        def assign_sample_random(self, cubesats, mothership, samples):
+            # Get idxs of input that are not assigned
+            idxs = [i for i, s in enumerate(samples) if s not in self.cubesat_sample_assignments.values()]
+            # Loop over all cubesats without an assignment
+            for c in filter(lambda c: c.id not in self.cubesat_sample_assignments, cubesats):
+                idx = np.random.choice(idxs, replace=False)
+                self.cubesat_sample_assignments[c.id] = samples[idx]
+                c.add_waypoint(samples[idx].position.copy())
+
+            return cubesats, samples
+
+        def mothership_assign_sample_min_dist(self, cubesats, mothership, samples):
+            waypoints_to_assign = dict()
+            for c in filter(lambda cs: cs.curr_waypoint is None, cubesats):
+                dists = {np.linalg.norm(c.position - s.position): i for i, s in enumerate(samples)}
+                while True:
+                    dist_vals = list(dists.keys())
+                    key = dist_vals[np.argmin(dist_vals)]
+                    idx = dists[key]
+                    sample = samples[idx]
+                    if sample not in self.cubesat_sample_assignments.values():
+                        waypoints_to_assign[c] = sample
+                        break
+                    del dists[key]  # The sample was assigned so onto the next-closest
+                    if len(dists) == 0:
+                        break
+
+            # for c, sample in waypoints_to_assign.items():
+                # self.cubesat_sample_assignments[c.id] = sample
+                # c.add_waypoint(sample.position)
+
+            def make_msg(c, sample):
+                self.cubesat_sample_assignments[c.id] = sample
+                return msgs.SampleAquireCommand(tx_id=mothership.id,
+                                                rx_id=c.id,
+                                                timestamp=0.0,
+                                                sample_pos=sample.position.copy())
+
+            msgs_to_send = [make_msg(c, sample) for c, sample in waypoints_to_assign.items()]
+
+            return cubesats, mothership, msgs_to_send, samples
+
+        def do_try_capture(self, cubesats, samples):
+            cs_id_map = {c.id: c for c in cubesats}
+            to_delete = []
+            for cubesat_id, samp in self.cubesat_sample_assignments.items():
+                c = cs_id_map[cubesat_id]
+                if np.linalg.norm(c.position - samp.position) <= 1:
+                    # Attempt a capture if close enough
+                    if c.attempt_sample_capture(samp):
+                        c.drop_curr_waypoint()
+                        to_delete.append(c.id)
+                        samples = [s for s in samples if s is not samp]
+                        if len(samples) == 0:  # If there's no more samples wait to recall this func to replan
+                            break
+            for id in to_delete:
+                del self.cubesat_sample_assignments[id]
+            return cubesats, samples
+
+        def do_all_cubsat_msg_callbacks(self, cubesats):
+            cs_id_map = {c.id: c for c in cubesats}
+            for csat in filter(lambda c: c.msg_queue_size > 0, cubesats):
+                while (timestamped_msg := csat.get_msg()) is not None:
+                    msg = timestamped_msg[1]
+                    if msgs.Message.is_type(msg, msgs.SampleAquireCommand):
+                        id = msg.rx_id
+                        waypoint = msg.msg['sample_pos']
+                        cs_id_map[id].add_waypoint(waypoint, front=True)
+                    else:
+                        raise RuntimeError("Unrecognized message type")
+            return cubesats
+
+
         def __call__(self, crafts, samples, cs_configs, logger):
-            cubesats = [c for c in crafts if type(c) is CubeSat]
-            mothership = [c for c in crafts if type(c) is Mothership][0]
+            cubesats = [c for c in crafts.values() if type(c) is CubeSat]
+            mothership = [c for c in crafts.values() if type(c) is Mothership][0]
+            cubesats = self.do_all_cubsat_msg_callbacks(cubesats)
+            msgs = None
             if self.iters == 0:
                 self.logger = logger
                 # Deploy a cubesat
                 while mothership.can_deploy_cubesat:
                     crafts = self.do_cubesat_deploy(mothership, crafts, cs_configs[mothership.id])
             elif len(samples) > 0:
-                for c in cubesats:
-                    # This cubesat take a sample
-                    dists = [np.linalg.norm(c.position - s.position) for s in samples]
-                    # Set a waypoint for the closest sample
-                    mindistidx = np.argmin(dists)
-                    if dists[mindistidx] <= 0.5:
-                        # Attempt a capture if close enough
-                        if c.attempt_sample_capture(samples[mindistidx]):
-                            del samples[mindistidx]
-                            if len(samples) == 0:  # If there's no more samples wait to recall this func to replan
-                                return crafts, samples
-                            continue
-                    # Set a waypoint to the closest sample
-                    c.add_waypoint(samples[mindistidx].position.copy(), front=True)
-            else:
+                # Assign each craft to capture the closest sample
+                # cubesats, samples = self.assign_sample_random(cubesats, mothership, samples)
+
+                # As the mothership, command each craft to a specific asteroid
+                cubesats, mothership, msgs, samples = self.mothership_assign_sample_min_dist(cubesats, mothership, samples)
+
+                # Attempt any sample captures we can
+                cubesats, samples = self.do_try_capture(cubesats, samples)
+            elif self.iters > 100:
                 for c in cubesats:
                     c.add_waypoint(mothership.position, front=True)  # Go dock if there's no samples
-                    # Can this cubesta dock?
+                    # Can this cubesat dock?
                     if np.linalg.norm(c.position - mothership.position) < 0.5:
                         mothership.dock_cubesat(c)
-                        crafts.remove(c)
-
-            # Are the craft's waypoints the same and not the mothership's location?
-            for c1 in cubesats:
-                for c2 in cubesats:
-                    if c1 is c2:
-                        continue
-                    if np.all(np.equal(c1.curr_waypoint, c2.curr_waypoint)) and \
-                       not np.all(np.equal(c1.curr_waypoint, mothership.position)):
-                        # If they're the same divert one
-                        c1.clear_waypoints()
-                        if len(samples) > 1:
-                            c1.add_waypoint(samples[np.random.randint(0, len(samples)-1)].position)
+                        del crafts[c.id]  # Remove from the sim's list of crafts
 
             self.iters += 1
-            return crafts, samples
+            return crafts, msgs, samples
 
     updater = Updater()
 
     max_to_launch = 5 * args.num_cubesats if args.num_workers == 1 else 15
+
     def ejector(time, samples, Plogger):
         if np.random.uniform() > 0.5 and \
            len(samples) < args.max_samples and \
@@ -402,17 +512,20 @@ def _test():
             nsamps = np.random.randint(1, max_to_launch)  # Add between 1 and 3 samples at a time
             logger.debug("Adding %s samples to the simulation at %s", nsamps, time)
             return [make_sample() for _ in range(nsamps)]
+        # if time == 0.0:
+        #     print("Making samples")
+        #     return [make_sample() for _ in range(2)]
         else:
             return []
-        return []
 
     def make_sample():
         return Sample(weight=np.random.uniform(5, 10),
                       value=np.random.uniform(1, 10),
                       position=np.random.uniform(-15, 15, 3),
-                      velocity=np.random.uniform(-0.05, 0.05, 3))
+                      velocity=np.zeros(3, dtype=float))
+                      #velocity=np.random.uniform(-0.05, 0.05, 3))
 
-    max_sim_time_min = 600
+    max_sim_time_min = 10
 
     def terminator(time, crafts, samples):
         # cs = [c for c in crafts if type(c) is CubeSat]
@@ -427,7 +540,6 @@ def _test():
             return True
         else:
             return False
-
 
     config: SimulationConfig = {
         'mothership_config': [
@@ -445,7 +557,7 @@ def _test():
         'planner': updater,
         'particle_ejector': ejector,
         'terminator': terminator,
-        'timestep': 0.1,
+        'timestep': 0.05,
     }
 
     if args.num_workers > 1:

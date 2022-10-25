@@ -24,7 +24,7 @@ class CommunicationLink:
 
     s1: Spacecraft
     s2: Spacecraft
-    datarate: int = 10
+    datarate: int = int(1e6)
     """The amount of data exchanged in some time [mB/s]"""
 
     def __eq__(self, o) -> bool:
@@ -34,4 +34,5 @@ class CommunicationLink:
 
     def is_valid(self) -> bool:
         """Return a comms link if two spacecraft can communicate."""
-        return np.linalg.norm(self.s1.position, self.s2.position) <= 5
+        #return np.linalg.norm(self.s1.position - self.s2.position) <= 50
+        return True

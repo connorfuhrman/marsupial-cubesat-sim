@@ -58,6 +58,8 @@ def _update_plot(frame_num, datagetter, axs):
 def _get_plot_layout(nplots: int) -> tuple[int, int]:
     if nplots == 1:
         return 1, 1
+    elif nplots == 2:
+        return 1, 2
     elif (sqrt := np.sqrt(nplots)) == round(sqrt):
         return int(sqrt), int(sqrt)
     else:
@@ -106,7 +108,7 @@ def entrypoint(sim_history: list[SimulationHistory], fname: str = None):
                         _update_plot,
                         max_max_iters+1,
                         fargs=(getdata, list(ax_map.keys()),),
-                        interval=10)
+                        interval=1)
     if fname is not None:
         with _animation_tqdm(total=max_max_iters, desc="Animation MP4 Save") as t:
             ani.save(fname, progress_callback=t.update_to)
