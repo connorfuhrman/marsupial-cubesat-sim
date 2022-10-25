@@ -396,7 +396,7 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
     parser.add_argument(
         "--sim_history_save", help="JSON file to save the sim history",
         type=str,
-        default="./sim_history.json"
+        default=None
     )
 
     args = parser.parse_args()
@@ -560,9 +560,9 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
 
     def ejector(time, samples, Plogger):
         if (
-            np.random.uniform() > 0.5
+            np.random.uniform() > 0.75
             and len(samples) < args.max_samples
-            and time < 60 * 5
+            and time < 60
         ):
             logger = logging.getLogger(f"{Plogger.name}.ParticleEjector")
             nsamps = np.random.randint(
@@ -581,10 +581,10 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
             weight=np.random.uniform(5, 10),
             value=np.random.uniform(1, 10),
             position=np.random.uniform(-15, 15, 3),
-            velocity=np.random.uniform(-0.05, 0.05, 3),
-        )
+            velocity=np.zeros(3))
+            #velocity=np.random.uniform(-0.05, 0.05, 3),
 
-    max_sim_time_min = 10
+    max_sim_time_min = 180
 
     def terminator(time, crafts, samples):
         # cs = [c for c in crafts if type(c) is CubeSat]
@@ -592,10 +592,10 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
         # return (len(samples) == 0 and time > 1) or \
         #     time > max_sim_time_min * 60
         if len(crafts) == 1:
-            logging.info("All cubesats docked!! Simulation ending.")
+            print("All cubesats docked!! Simulation ending.")
             return True
         elif time > max_sim_time_min * 60:
-            logging.info("Timeout!")
+            print("Timeout!")
             return True
         else:
             return False
@@ -624,11 +624,16 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
             _config["mothership_config"][0]["cubesat_capacity"] = np.random.randint(
                 3, 10
             )
-            return SimulationActor.remote(config)
+            return SimulationActor.remote(_config)
 
         ray.init()
         ncpus = int(ray.available_resources()['CPU'])
         sims_history = []
+        # Launch Ray workers in batches. This should probably be replaced
+        # in the future with ray.wait to wait on N refs then launch more
+        # so we're not wasting resources.
+        #
+        # https://docs.ray.io/en/latest/ray-core/package-ref.html#ray-wait-ref
         while len(sims_history) != args.num_workers:
             if (nprocs_left := args.num_workers - len(sims_history)) < ncpus:
                 n_to_launch = nprocs_left
@@ -640,8 +645,9 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
         if not args.no_animation:
             print(f"Animating {args.num_workers} simulations")
             animate_simulation(sims_history, args.mp4_file)
-        to_save = {s['metadata']['id']: s for s in sims_history}
-        save_json_file(to_save, args.sim_history_save)
+        if args.sim_history_save is not None:
+            to_save = {s['metadata']['id']: s for s in sims_history}
+            save_json_file(to_save, args.sim_history_save)
     else:
         try:
             sim = Simulation(config)

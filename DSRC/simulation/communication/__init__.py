@@ -21,6 +21,9 @@ _msgs_mod = importlib.import_module("DSRC.simulation.communication.messages")
 _classes = [cls_name for cls_name, cls_obj in inspect.getmembers(_msgs_mod) if inspect.isclass(cls_obj)]
 _classes = filter(lambda c: c != 'Message' and c != 'MessageData', _classes)
 
+MessageData_cls = getattr(_msgs_mod, 'MessageData')
+MessageData_keys = list(MessageData_cls.__annotations__.keys())
+
 
 def _class_same(c1, c2, attr):
     def get(c, a):
@@ -29,14 +32,18 @@ def _class_same(c1, c2, attr):
         n_cmems = len(c_mems)
         return set(c_mems), n_cmems
 
-    def check(c, n):
+    def check(c, n, cls):
         if len(c) != n:
-            raise RuntimeError("Somehow got repeated TypedDict keys")
+            raise ImportError("Somehow got repeated TypedDict keys")
+        for m in MessageData_keys:
+            if m not in c:
+                raise ImportError(f"{m} is not found in the keys of {cls}. "
+                                  "Does this type inherit from MessageData as it should?")
     c1_mems, nc1_mems = get(c1, attr)
     c2_mems, nc2_mems = get(c2, attr)
 
-    check(c1_mems, nc1_mems)
-    check(c2_mems, nc2_mems)
+    check(c1_mems, nc1_mems, c1)
+    check(c2_mems, nc2_mems, c2)
 
     return c1_mems == c2_mems
 
