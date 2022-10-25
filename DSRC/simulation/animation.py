@@ -26,25 +26,29 @@ def _update_plot(frame_num, datagetter, axs):
     for ax in axs:
         lines, sample_lines, frame_data, metadata = datagetter(ax, frame_num)
         if frame_data is not None and metadata is not None:
-            positions = frame_data['craft_positions']
+            positions = frame_data["craft_positions"]
             for id, line in lines.items():
                 if id in positions:
-                    marker = "$c$" if frame_data['craft_types'][id] == "CubeSat" else "$M$"
+                    marker = (
+                        "$c$" if frame_data["craft_types"][id] == "CubeSat" else "$M$"
+                    )
                     line.set_data_3d(*positions[id])
                     line.set(alpha=1.0)
                     line.set(marker=marker)
                 else:
                     line.set(alpha=0.0)
 
-            for i, pos in enumerate(frame_data['sample_positions']):
+            for i, pos in enumerate(frame_data["sample_positions"]):
                 sample_lines[i].set_data_3d(*pos)
-                sample_lines[i].set(alpha=1.0, color='b')
-            i = len(frame_data['sample_positions'])
+                sample_lines[i].set(alpha=1.0, color="b")
+            i = len(frame_data["sample_positions"])
             while i < len(sample_lines):
                 sample_lines[i].set(alpha=0.0)
                 i += 1
-            ax.set_title(f"Simulation {metadata['id']}\nat iteration {frame_num} "
-                         f" (time: {float(frame_data['time']):.5}s)")
+            ax.set_title(
+                f"Simulation {metadata['id']}\nat iteration {frame_num} "
+                f" (time: {float(frame_data['time']):.5}s)"
+            )
         else:
             for line in chain(lines.values(), sample_lines):
                 line.set(alpha=0.0)
@@ -78,37 +82,40 @@ def entrypoint(sim_history: list[SimulationHistory], fname: str = None):
         def do_plot(marker):
             return ax.plot([], [], [], alpha=0.0, marker=marker)[0]
 
-        ax.set(xlim3d=(-25, 25),
-               ylim3d=(-25, 25),
-               zlim3d=(-25, 25))
+        ax.set(xlim3d=(-25, 25), ylim3d=(-25, 25), zlim3d=(-25, 25))
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
         ax_map[ax] = {
             "sim_data": h,
-            "lines": {id: do_plot(marker="s")
-                      for id in h['metadata']['craft_ids']},
-            "sample_lines": [do_plot(marker=".")
-                             for _ in range(h['metadata']['max_num_samples'])]
+            "lines": {id: do_plot(marker="s") for id in h["metadata"]["craft_ids"]},
+            "sample_lines": [
+                do_plot(marker=".") for _ in range(h["metadata"]["max_num_samples"])
+            ],
         }
-        if (ti := h['metadata']['total_iters']) > max_max_iters:
+        if (ti := h["metadata"]["total_iters"]) > max_max_iters:
             max_max_iters = ti
 
     def getdata(ax, framenum):
         data = ax_map[ax]
         try:
-            history = data['sim_data']['history'][framenum]
-            metadata = data['sim_data']['metadata']
+            history = data["sim_data"]["history"][framenum]
+            metadata = data["sim_data"]["metadata"]
         except IndexError:
             history = None
             metadata = None
-        return data['lines'], data['sample_lines'], history, metadata
+        return data["lines"], data["sample_lines"], history, metadata
 
-    ani = FuncAnimation(fig,                        # noqa F481: I know this is unused
-                        _update_plot,
-                        max_max_iters+1,
-                        fargs=(getdata, list(ax_map.keys()),),
-                        interval=1)
+    ani = FuncAnimation(
+        fig,  # noqa F481: I know this is unused
+        _update_plot,
+        max_max_iters + 1,
+        fargs=(
+            getdata,
+            list(ax_map.keys()),
+        ),
+        interval=1,
+    )
     if fname is not None:
         with _animation_tqdm(total=max_max_iters, desc="Animation MP4 Save") as t:
             ani.save(fname, progress_callback=t.update_to)

@@ -3,10 +3,7 @@
 Cubesat class is a child of the Spacecraft class.
 """
 
-from DSRC.simulation.spacecraft import (
-    Spacecraft,
-    StraightLineAutopilot
-)
+from DSRC.simulation.spacecraft import Spacecraft, StraightLineAutopilot
 import numpy as np
 from scipy.stats import bernoulli
 from typing import Protocol
@@ -35,16 +32,18 @@ class CubeSat(Spacecraft):
     _dist: bernoulli
     """Bernoilli probability distribution."""
 
-    def __init__(self,
-                 loc: np.ndarray,
-                 fuel_capacity: float,
-                 sample_prob: float,
-                 parentLogger: Logger,
-                 *,
-                 is_deployed: bool = True,
-                 vel: np.ndarray = None,
-                 rot_vel: np.ndarray = None,
-                 ori: np.ndarray = None):
+    def __init__(
+        self,
+        loc: np.ndarray,
+        fuel_capacity: float,
+        sample_prob: float,
+        parentLogger: Logger,
+        *,
+        is_deployed: bool = True,
+        vel: np.ndarray = None,
+        rot_vel: np.ndarray = None,
+        ori: np.ndarray = None
+    ):
         """Initialize the cubesat.
 
         Initialization can either have the cubesat deployed
@@ -52,7 +51,9 @@ class CubeSat(Spacecraft):
         in the mothership
         """
         self._logger_name = "CubeSat"
-        super().__init__(loc, fuel_capacity, StraightLineAutopilot, parentLogger, vel, rot_vel,  ori)
+        super().__init__(
+            loc, fuel_capacity, StraightLineAutopilot, parentLogger, vel, rot_vel, ori
+        )
         self._is_deployed = is_deployed
         self._has_sample = False
         self._samples = []
@@ -74,7 +75,10 @@ class CubeSat(Spacecraft):
         captured = bool(self._dist.rvs())
         if captured:
             self._samples.append(sample)
-            self._logger.debug("Captured the sample! This craft now holds %s grams of sample", self.sample_weight)
+            self._logger.debug(
+                "Captured the sample! This craft now holds %s grams of sample",
+                self.sample_weight,
+            )
         else:
             self._logger.debug("Failed to capture sample :(")
         return captured

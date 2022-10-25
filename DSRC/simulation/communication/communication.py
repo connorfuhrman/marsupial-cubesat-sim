@@ -43,14 +43,13 @@ class Transmission:
     @property
     def receiver(self) -> "Spacecraft":
         """Get the spacecraft object."""
-        id = self.msg.msg['tx_id']
+        id = self.msg.msg["tx_id"]
         if (s1 := self.link.s1).id == id:
             return s1
         elif (s2 := self.link.s2).id == id:
             return s2
         else:
             raise RuntimeError("Cannot find the right spacecrft obj")
-
 
     def __key(self):
         """Create hashing tuple.
@@ -59,7 +58,7 @@ class Transmission:
         will have a timestamp then some more data.
         If you send duplicates of the same exact message
         this will cause a collision. Note that in this case
-        then 
+        then
         """
         return self.msg.msg_str
 

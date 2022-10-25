@@ -1,10 +1,4 @@
 from .communication_link import CommunicationLink
-from .communication import (
-    SimulationManager as CommsSimManager,
-    Transmission
-)
+from .communication import SimulationManager as CommsSimManager, Transmission
 
-from .messages import (
-    Message,
-    SpacecraftState as SpacecraftStateMsg
-)
+from .messages import Message, SpacecraftState as SpacecraftStateMsg

@@ -29,10 +29,11 @@ class CommunicationLink:
 
     def __eq__(self, o) -> bool:
         """Two links are equal if the same two ships are involved."""
-        return (self.s1 == o.s1 or self.s1 == o.s2) and \
-            (self.s2 == o.s2 or self.s2 == o.s1)
+        return (self.s1 == o.s1 or self.s1 == o.s2) and (
+            self.s2 == o.s2 or self.s2 == o.s1
+        )
 
     def is_valid(self) -> bool:
         """Return a comms link if two spacecraft can communicate."""
-        #return np.linalg.norm(self.s1.position - self.s2.position) <= 50
+        # return np.linalg.norm(self.s1.position - self.s2.position) <= 50
         return True

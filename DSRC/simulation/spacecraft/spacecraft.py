@@ -6,10 +6,7 @@ from shortuuid import uuid
 from copy import copy
 from typing import Union, Protocol, Tuple
 from queue import Queue
-from DSRC.simulation.communication import (
-    CommsSimManager,
-    Message
-)
+from DSRC.simulation.communication import CommsSimManager, Message
 from DSRC.simulation.communication import SpacecraftStateMsg
 
 
@@ -69,14 +66,16 @@ class Spacecraft:
     _id: str
     """Unique ID for this spacecraft."""
 
-    def __init__(self,
-                 loc: np.ndarray,
-                 fuel_level: float,
-                 autopilotClass: Autopilot,
-                 parentLogger: logging.Logger,
-                 vel: np.ndarray = None,
-                 rot_vel: np.ndarray = None,
-                 ori: np.ndarray = None):
+    def __init__(
+        self,
+        loc: np.ndarray,
+        fuel_level: float,
+        autopilotClass: Autopilot,
+        parentLogger: logging.Logger,
+        vel: np.ndarray = None,
+        rot_vel: np.ndarray = None,
+        ori: np.ndarray = None,
+    ):
         """Initialize a spacecraft.
 
         Initialize with a location and, optionally,
@@ -96,17 +95,19 @@ class Spacecraft:
 
         assign_arr(loc, "_position")
         assign_arr(default() if vel is None else vel, "_velocity")
-        assign_arr(default() if rot_vel is None else rot_vel,
-                   "_rotational_velocity")
+        assign_arr(default() if rot_vel is None else rot_vel, "_rotational_velocity")
         assign_arr(default() if ori is None else ori, "_orientation")
 
-        self._logger = logging.getLogger(f"{parentLogger.name}."
-                                         f"spacecraft.{self.id}")
+        self._logger = logging.getLogger(
+            f"{parentLogger.name}." f"spacecraft.{self.id}"
+        )
         self._autopilot = autopilotClass(self._logger)
-        self._logger.debug("Constructed at position %s "
-                           "with velocity %s "
-                           "and orientation %s",
-                           self.position, self.velocity, self.orientation)
+        self._logger.debug(
+            "Constructed at position %s " "with velocity %s " "and orientation %s",
+            self.position,
+            self.velocity,
+            self.orientation,
+        )
 
     def update_kinematics(self, dtime, vel_mag: float = 1.0) -> bool:
         """Update the kinematic state of the craft.
@@ -121,8 +122,8 @@ class Spacecraft:
         dt = float(dtime)  # In case this is passed as mpf
         heading = self._autopilot.update(self.position)
         self._velocity = vel_mag * heading
-        self._position += (dt * self.velocity)
-        self._orientation += (dt * self._rotational_velocity)
+        self._position += dt * self.velocity
+        self._orientation += dt * self._rotational_velocity
         # TODO Update fuel level based on acceleration
         return self.fuel_level > 0.0
 
@@ -153,17 +154,24 @@ class Spacecraft:
         else:
             return self._msg_queue.get()
 
-    def get_state_msg(self, time: float,
-                      as_msg_obj: bool = False) -> Union[SpacecraftStateMsg, Message]:
+    def get_state_msg(
+        self, time: float, as_msg_obj: bool = False
+    ) -> Union[SpacecraftStateMsg, Message]:
         """Get a state message for this spacecraft."""
-        return self._get_msg(SpacecraftStateMsg(id=self.id,
-                                                timesteamp=time,
-                                                position=self.position,
-                                                fuel_level=self.fuel_level,
-                                                has_sample=self.has_sample),
-                             as_msg_obj)
+        return self._get_msg(
+            SpacecraftStateMsg(
+                id=self.id,
+                timesteamp=time,
+                position=self.position,
+                fuel_level=self.fuel_level,
+                has_sample=self.has_sample,
+            ),
+            as_msg_obj,
+        )
 
-    def _get_msg(self, msg: dict, as_msg_obj: bool) -> Union[dict, Message]:  # noqa D 400
+    def _get_msg(
+        self, msg: dict, as_msg_obj: bool
+    ) -> Union[dict, Message]:  # noqa D 400
         """Convenince function:
 
         Get a msg either as the dict of a Message obj.

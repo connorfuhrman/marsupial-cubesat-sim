@@ -33,6 +33,7 @@ class _NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+
 def _json_dumps(obj):
     return json.dumps(obj, cls=_NumpyEncoder)
 
@@ -48,7 +49,7 @@ class Message:
 
     def __init__(self, msg: MessageData):  # noqa D
         self.msg = msg
-        self.size = len(bytes(self.msg_str, encoding='utf8'))
+        self.size = len(bytes(self.msg_str, encoding="utf8"))
 
     def __eq__(self, o) -> bool:  # noqa D
         return self.msg == o.msg
@@ -67,15 +68,15 @@ class Message:
 
     @property
     def tx_id(self) -> str:  # noqa D
-        return self.msg['tx_id']
+        return self.msg["tx_id"]
 
     @property
     def rx_id(self) -> str:  # noqa D
-        return self.msg['rx_id']
+        return self.msg["rx_id"]
 
     @property
     def timestamp(self) -> float:  # noqa D
-        return self.msg['timestamp']
+        return self.msg["timestamp"]
 
     @property
     def msg_str(self) -> str:

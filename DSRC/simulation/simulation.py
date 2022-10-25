@@ -2,7 +2,11 @@
 
 
 from DSRC.simulation.spacecraft import Spacecraft, CubeSat, Mothership
-from DSRC.simulation import SimulationHistoryTimestep, SimulationHistory, SimulationHistoryMData
+from DSRC.simulation import (
+    SimulationHistoryTimestep,
+    SimulationHistory,
+    SimulationHistoryMData,
+)
 from DSRC.simulation.communication import CommsSimManager, Message
 from dataclasses import dataclass
 import numpy as np
@@ -76,13 +80,15 @@ class Sample:
 
     def update_kinematics(self, dt: float, *args) -> None:
         """Update the position of the sample."""
-        self.position += (float(dt) * self.velocity)
+        self.position += float(dt) * self.velocity
 
     def __eq__(self, o):  # noqa D
-        return (self.weight == o.weight and
-                self.value == o.value and
-                np.array_equal(self.position, o.position) and
-                np.array_equal(self.velocity, o.velocity))
+        return (
+            self.weight == o.weight
+            and self.value == o.value
+            and np.array_equal(self.position, o.position)
+            and np.array_equal(self.velocity, o.velocity)
+        )
 
 
 class Simulation:
@@ -140,35 +146,38 @@ class Simulation:
         self._logger = logging.getLogger(f"root.simulation.{self.id}")
         self._logger.info(f"Creating simulation {self.id}")
         self._logger.setLevel(logging.INFO)
-        self._planner = config['planner']
-        self._particle_ejector = config['particle_ejector']
-        self._terminator = config['terminator']
-        self._simdt = mpf(config['timestep'])
+        self._planner = config["planner"]
+        self._particle_ejector = config["particle_ejector"]
+        self._terminator = config["terminator"]
+        self._simdt = mpf(config["timestep"])
 
-        if len((cs_config := config['cubesat_config'])) == 1:
-            cs_configs = [cs_config[0] for _ in config['mothership_config']]
+        if len((cs_config := config["cubesat_config"])) == 1:
+            cs_configs = [cs_config[0] for _ in config["mothership_config"]]
         else:
-            if (nc := len(cs_config)) != (nm := len(config['mothership_config'])):
-                raise ValueError(f"Got {nc} cubesat configs and {nm} mothership configs.")
+            if (nc := len(cs_config)) != (nm := len(config["mothership_config"])):
+                raise ValueError(
+                    f"Got {nc} cubesat configs and {nm} mothership configs."
+                )
             cs_configs = cs_config
 
         # Instantiate all mothership(s)
-        for ms_config, cs_config in zip(config['mothership_config'], cs_configs):
-            ms = Mothership(ms_config['initial_position'],
-                            ms_config['cubesat_capacity'],
-                            self._logger,
-                            ms_config['fuel_capacity'])
+        for ms_config, cs_config in zip(config["mothership_config"], cs_configs):
+            ms = Mothership(
+                ms_config["initial_position"],
+                ms_config["cubesat_capacity"],
+                self._logger,
+                ms_config["fuel_capacity"],
+            )
             self._crafts[ms.id] = ms
-            self._logger.debug("Added mothership %s as %s",
-                               ms.id, ms.position)
+            self._logger.debug("Added mothership %s as %s", ms.id, ms.position)
             self._cubesat_configs[ms.id] = cs_config
 
         self._metadata = {
-            'max_num_crafts': len(self.crafts),
-            'max_num_samples': 0,
-            'total_iters': 0,
-            'craft_ids': set(self.crafts.keys()),
-            'id': self.id,
+            "max_num_crafts": len(self.crafts),
+            "max_num_samples": 0,
+            "total_iters": 0,
+            "craft_ids": set(self.crafts.keys()),
+            "id": self.id,
         }
 
     def run(self) -> SimulationHistory:
@@ -207,34 +216,41 @@ class Simulation:
         # perform sample capture, deploy more sample return crafts, or dock sample return crafts
         # Additionally, this step should return a list of messages which are sent between crafts via
         # the CommsSimManager object.
-        self._crafts, msgs, self._samples = self._planner(self._crafts, self._samples, self.cubesat_configs, self._logger)
+        self._crafts, msgs, self._samples = self._planner(
+            self._crafts, self._samples, self.cubesat_configs, self._logger
+        )
         if msgs is not None:
             for m in msgs:
                 if type(m) is not Message:
                     m = Message(m)
-                self._comms_manager.send_msg(m, self.crafts[m.tx_id], self.crafts[m.rx_id])
+                self._comms_manager.send_msg(
+                    m, self.crafts[m.tx_id], self.crafts[m.rx_id]
+                )
         # Add any more samples to the simulation which were ejected
         # by some rubble-pile asteroid
         new_samps = self._particle_ejector(self.simtime, self.samples, self._logger)
         if len(new_samps) > 0:
             self._samples.extend(new_samps)
             self._logger.debug("Added new samples: %s", [s for s in new_samps])
-            if self._metadata['max_num_samples'] < len(self._samples):
-                self._metadata['max_num_samples'] = len(self._samples)
-        self._metadata['craft_ids'] |= set(self.crafts.keys())  # Update craft IDs
-        if (nc := len(self.crafts)) > self._metadata['max_num_crafts']:
-            self._metadata['max_num_crafts'] = nc  # Update max # of craft at one iter
+            if self._metadata["max_num_samples"] < len(self._samples):
+                self._metadata["max_num_samples"] = len(self._samples)
+        self._metadata["craft_ids"] |= set(self.crafts.keys())  # Update craft IDs
+        if (nc := len(self.crafts)) > self._metadata["max_num_crafts"]:
+            self._metadata["max_num_crafts"] = nc  # Update max # of craft at one iter
         self._simtime += self.dt
         self._comms_manager.update(self.simtime, self.dt)  # Update the comms simulation
         self._history.append(
             {
                 "time": self.simtime,
                 "craft_positions": {c.id: c.position for c in self.crafts.values()},
-                "craft_types": {c.id: "CubeSat" if type(c) is CubeSat else "Mothership"
-                                for c in self.crafts.values()},
-                "sample_positions": [s.position.copy() for s in self.samples]
-            })
-        self._metadata['total_iters'] += 1
+                "craft_types": {
+                    c.id: "CubeSat" if type(c) is CubeSat else "Mothership"
+                    for c in self.crafts.values()
+                },
+                "sample_positions": [s.position.copy() for s in self.samples],
+            }
+        )
+        self._metadata["total_iters"] += 1
 
     @property
     def id(self) -> str:  # noqa D
@@ -281,7 +297,7 @@ class Simulation:
 
     @property
     def iter(self) -> int:  # noqa D
-        return self._metadata['total_iters']
+        return self._metadata["total_iters"]
 
     def _get_crafts_by_type(self, T):  # noqa D
         return {c.id: c for c in self.crafts if type(c) is T}
@@ -304,7 +320,7 @@ def _make_circle(center: np.ndarray, rad: float, npoints: int = 100) -> np.ndarr
 
     The circle lies in a horizontal plane at z = center[2].
     """
-    theta = np.linspace(0, 2*np.pi, npoints)
+    theta = np.linspace(0, 2 * np.pi, npoints)
     xpnts = rad * np.cos(theta)
     ypnts = rad * np.sin(theta)
 
@@ -313,9 +329,11 @@ def _make_circle(center: np.ndarray, rad: float, npoints: int = 100) -> np.ndarr
         arr[i, :] = np.array([x, y, center[2]])
     return arr
 
+
 def _del_list_inplace(l, id_to_del):
     for i in sorted(id_to_del, reverse=True):
-        del(l[i])
+        del l[i]
+
 
 def _all_equal(iterable):
     g = groupby(iterable)
@@ -348,26 +366,30 @@ def _test():
     from DSRC.simulation.communication import messages as msgs
 
     parser = ap.ArgumentParser()
-    parser.add_argument("--num_workers",
-                        type=int,
-                        help="How many Ray workers. If 1 run without Ray.",
-                        default=1)
-    parser.add_argument("--cubesat_radius",
-                        type=float,
-                        help="The radius path to fly",
-                        default=12.5)
-    parser.add_argument("--num_cubesats",
-                        type=int,
-                        help="The number of cubesats (only applicable to non-Ray runs",
-                        default=1)
-    parser.add_argument("--max_samples",
-                        type=int,
-                        help="The max number of samples in a simulation.",
-                        default=15)
-    parser.add_argument("--mp4_file",
-                        type=str,
-                        help="MP4 file to save the animation.",
-                        default=None)
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        help="How many Ray workers. If 1 run without Ray.",
+        default=1,
+    )
+    parser.add_argument(
+        "--cubesat_radius", type=float, help="The radius path to fly", default=12.5
+    )
+    parser.add_argument(
+        "--num_cubesats",
+        type=int,
+        help="The number of cubesats (only applicable to non-Ray runs",
+        default=1,
+    )
+    parser.add_argument(
+        "--max_samples",
+        type=int,
+        help="The max number of samples in a simulation.",
+        default=15,
+    )
+    parser.add_argument(
+        "--mp4_file", type=str, help="MP4 file to save the animation.", default=None
+    )
 
     args = parser.parse_args()
 
@@ -386,8 +408,7 @@ def _test():
         def do_cubesat_deploy(self, mothership, crafts, config):
             offset = np.array([0, 0, 5 * (self.num_cubesats_deployed + 1)], dtype=float)
             deploy_pos = mothership.position - offset
-            cs = CubeSat(deploy_pos, config['fuel_capacity'],
-                         0.95, self.logger)
+            cs = CubeSat(deploy_pos, config["fuel_capacity"], 0.95, self.logger)
             # waypoints = _make_circle(deploy_pos, args.cubesat_radius, npoints=25)
             # for w in waypoints:
             #     cs.add_waypoint(w) # + np.random.normal(0, 0.25, size=3))
@@ -399,9 +420,15 @@ def _test():
 
         def assign_sample_random(self, cubesats, mothership, samples):
             # Get idxs of input that are not assigned
-            idxs = [i for i, s in enumerate(samples) if s not in self.cubesat_sample_assignments.values()]
+            idxs = [
+                i
+                for i, s in enumerate(samples)
+                if s not in self.cubesat_sample_assignments.values()
+            ]
             # Loop over all cubesats without an assignment
-            for c in filter(lambda c: c.id not in self.cubesat_sample_assignments, cubesats):
+            for c in filter(
+                lambda c: c.id not in self.cubesat_sample_assignments, cubesats
+            ):
                 idx = np.random.choice(idxs, replace=False)
                 self.cubesat_sample_assignments[c.id] = samples[idx]
                 c.add_waypoint(samples[idx].position.copy())
@@ -411,7 +438,10 @@ def _test():
         def mothership_assign_sample_min_dist(self, cubesats, mothership, samples):
             waypoints_to_assign = dict()
             for c in filter(lambda cs: cs.curr_waypoint is None, cubesats):
-                dists = {np.linalg.norm(c.position - s.position): i for i, s in enumerate(samples)}
+                dists = {
+                    np.linalg.norm(c.position - s.position): i
+                    for i, s in enumerate(samples)
+                }
                 while True:
                     dist_vals = list(dists.keys())
                     key = dist_vals[np.argmin(dist_vals)]
@@ -425,17 +455,21 @@ def _test():
                         break
 
             # for c, sample in waypoints_to_assign.items():
-                # self.cubesat_sample_assignments[c.id] = sample
-                # c.add_waypoint(sample.position)
+            # self.cubesat_sample_assignments[c.id] = sample
+            # c.add_waypoint(sample.position)
 
             def make_msg(c, sample):
                 self.cubesat_sample_assignments[c.id] = sample
-                return msgs.SampleAquireCommand(tx_id=mothership.id,
-                                                rx_id=c.id,
-                                                timestamp=0.0,
-                                                sample_pos=sample.position.copy())
+                return msgs.SampleAquireCommand(
+                    tx_id=mothership.id,
+                    rx_id=c.id,
+                    timestamp=0.0,
+                    sample_pos=sample.position.copy(),
+                )
 
-            msgs_to_send = [make_msg(c, sample) for c, sample in waypoints_to_assign.items()]
+            msgs_to_send = [
+                make_msg(c, sample) for c, sample in waypoints_to_assign.items()
+            ]
 
             return cubesats, mothership, msgs_to_send, samples
 
@@ -450,7 +484,9 @@ def _test():
                         c.drop_curr_waypoint()
                         to_delete.append(c.id)
                         samples = [s for s in samples if s is not samp]
-                        if len(samples) == 0:  # If there's no more samples wait to recall this func to replan
+                        if (
+                            len(samples) == 0
+                        ):  # If there's no more samples wait to recall this func to replan
                             break
             for id in to_delete:
                 del self.cubesat_sample_assignments[id]
@@ -463,12 +499,11 @@ def _test():
                     msg = timestamped_msg[1]
                     if msgs.Message.is_type(msg, msgs.SampleAquireCommand):
                         id = msg.rx_id
-                        waypoint = msg.msg['sample_pos']
+                        waypoint = msg.msg["sample_pos"]
                         cs_id_map[id].add_waypoint(waypoint, front=True)
                     else:
                         raise RuntimeError("Unrecognized message type")
             return cubesats
-
 
         def __call__(self, crafts, samples, cs_configs, logger):
             cubesats = [c for c in crafts.values() if type(c) is CubeSat]
@@ -479,19 +514,30 @@ def _test():
                 self.logger = logger
                 # Deploy a cubesat
                 while mothership.can_deploy_cubesat:
-                    crafts = self.do_cubesat_deploy(mothership, crafts, cs_configs[mothership.id])
+                    crafts = self.do_cubesat_deploy(
+                        mothership, crafts, cs_configs[mothership.id]
+                    )
             elif len(samples) > 0:
                 # Assign each craft to capture the closest sample
                 # cubesats, samples = self.assign_sample_random(cubesats, mothership, samples)
 
                 # As the mothership, command each craft to a specific asteroid
-                cubesats, mothership, msgs, samples = self.mothership_assign_sample_min_dist(cubesats, mothership, samples)
+                (
+                    cubesats,
+                    mothership,
+                    msgs,
+                    samples,
+                ) = self.mothership_assign_sample_min_dist(
+                    cubesats, mothership, samples
+                )
 
                 # Attempt any sample captures we can
                 cubesats, samples = self.do_try_capture(cubesats, samples)
             elif self.iters > 100:
                 for c in cubesats:
-                    c.add_waypoint(mothership.position, front=True)  # Go dock if there's no samples
+                    c.add_waypoint(
+                        mothership.position, front=True
+                    )  # Go dock if there's no samples
                     # Can this cubesat dock?
                     if np.linalg.norm(c.position - mothership.position) < 0.5:
                         mothership.dock_cubesat(c)
@@ -505,11 +551,15 @@ def _test():
     max_to_launch = 5 * args.num_cubesats if args.num_workers == 1 else 15
 
     def ejector(time, samples, Plogger):
-        if np.random.uniform() > 0.5 and \
-           len(samples) < args.max_samples and \
-           time < 60 * 5:
+        if (
+            np.random.uniform() > 0.5
+            and len(samples) < args.max_samples
+            and time < 60 * 5
+        ):
             logger = logging.getLogger(f"{Plogger.name}.ParticleEjector")
-            nsamps = np.random.randint(1, max_to_launch)  # Add between 1 and 3 samples at a time
+            nsamps = np.random.randint(
+                1, max_to_launch
+            )  # Add between 1 and 3 samples at a time
             logger.debug("Adding %s samples to the simulation at %s", nsamps, time)
             return [make_sample() for _ in range(nsamps)]
         # if time == 0.0:
@@ -519,10 +569,12 @@ def _test():
             return []
 
     def make_sample():
-        return Sample(weight=np.random.uniform(5, 10),
-                      value=np.random.uniform(1, 10),
-                      position=np.random.uniform(-15, 15, 3),
-                      velocity=np.random.uniform(-0.05, 0.05, 3))
+        return Sample(
+            weight=np.random.uniform(5, 10),
+            value=np.random.uniform(1, 10),
+            position=np.random.uniform(-15, 15, 3),
+            velocity=np.random.uniform(-0.05, 0.05, 3),
+        )
 
     max_sim_time_min = 10
 
@@ -541,32 +593,34 @@ def _test():
             return False
 
     config: SimulationConfig = {
-        'mothership_config': [
+        "mothership_config": [
             {
-                'initial_position': np.array([0, 0, 0], dtype=float),
-                'cubesat_capacity': args.num_cubesats,
-                'fuel_capacity': 100
+                "initial_position": np.array([0, 0, 0], dtype=float),
+                "cubesat_capacity": args.num_cubesats,
+                "fuel_capacity": 100,
             },
         ],
-        'cubesat_config': [
-            {
-                'fuel_capacity': 10
-            },
+        "cubesat_config": [
+            {"fuel_capacity": 10},
         ],
-        'planner': updater,
-        'particle_ejector': ejector,
-        'terminator': terminator,
-        'timestep': 0.05,
+        "planner": updater,
+        "particle_ejector": ejector,
+        "terminator": terminator,
+        "timestep": 0.05,
     }
 
     if args.num_workers > 1:
+
         def make_actor(n):
             _config = config.copy()
-            _config['mothership_config'][0]['cubesat_capacity'] = np.random.randint(3, 10)
+            _config["mothership_config"][0]["cubesat_capacity"] = np.random.randint(
+                3, 10
+            )
             return SimulationActor.remote(config)
+
         ray.init()
         resources = ray.available_resources()
-        ncpus = resources['CPU']
+        ncpus = resources["CPU"]
         sims = [make_actor(n) for n in range(args.num_workers)]
         sims_history = ray.get([s.run.remote() for s in sims])
         print(f"Animating {args.num_workers} simulations")
@@ -579,10 +633,11 @@ def _test():
             animate_simulation([sim_history], args.mp4_file)
         except Exception:
             import pdb, traceback, sys  # noqa E401
+
             extype, value, tb = sys.exc_info()
             traceback.print_exc()
             pdb.post_mortem(tb)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     _test()

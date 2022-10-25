@@ -46,8 +46,10 @@ class StraightLineAutopilot:
             self._tracking_waypnt = pnt  # Now this point is being tracked
         else:
             self._waypoints.append(pnt)
-        self._logger.debug(f"Added {pnt} to list of waypoints. "
-                           f"There are now {self.num_waypoints} waypoints.")
+        self._logger.debug(
+            f"Added {pnt} to list of waypoints. "
+            f"There are now {self.num_waypoints} waypoints."
+        )
 
     def clear_waypoints(self) -> None:
         """Clear the waypoints."""
@@ -71,10 +73,13 @@ class StraightLineAutopilot:
             self._heading = np.zeros(3, dtype=float)
         elif self._tracking_waypnt is None and self.num_waypoints > 0:
             self._tracking_waypnt = self._waypoints.popleft()
-            self._logger.debug("There is not a waypoint being tracked. "
-                               "Tracking %s as the next waypoint. "
-                               "There are %s more waypoints in the sequence.",
-                               self._tracking_waypnt, self.num_waypoints)
+            self._logger.debug(
+                "There is not a waypoint being tracked. "
+                "Tracking %s as the next waypoint. "
+                "There are %s more waypoints in the sequence.",
+                self._tracking_waypnt,
+                self.num_waypoints,
+            )
             self._calc_heading(pos)
         elif self._waypoint_captured(pos):
             # Only if we've captured the tracking waypoint
@@ -87,7 +92,11 @@ class StraightLineAutopilot:
             else:
                 self._tracking_waypnt = self._waypoints.popleft()
                 self._calc_heading(pos)
-                self._logger.debug("New heading is %s tracking waypoing %s", self._heading, self._tracking_waypnt)
+                self._logger.debug(
+                    "New heading is %s tracking waypoing %s",
+                    self._heading,
+                    self._tracking_waypnt,
+                )
         else:
             self._calc_heading(pos)
         return self._heading
@@ -107,4 +116,6 @@ class StraightLineAutopilot:
 
     @property
     def curr_waypoint(self) -> np.ndarray:  # noqa D
-        return self._tracking_waypnt.copy() if self._tracking_waypnt is not None else None
+        return (
+            self._tracking_waypnt.copy() if self._tracking_waypnt is not None else None
+        )

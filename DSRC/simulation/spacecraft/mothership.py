@@ -10,6 +10,7 @@ from DSRC.simulation.spacecraft import StraightLineAutopilot
 from logging import Logger
 import numpy as np
 
+
 class Mothership(Spacecraft):
     """Class to represent a mothership."""
 
@@ -18,17 +19,20 @@ class Mothership(Spacecraft):
     _num_docked_cubesats: int
     """How many cubesats are currently docked."""
 
-    def __init__(self,
-                 pos: np.ndarray,
-                 cubesat_capacity: int,
-                 parent_logger: Logger,
-                 fuel_level: float,
-                 vel: np.ndarray = None,
-                 rot_vel: np.ndarray = None,
-                 ori: np.ndarray = None):  # noqa D
+    def __init__(
+        self,
+        pos: np.ndarray,
+        cubesat_capacity: int,
+        parent_logger: Logger,
+        fuel_level: float,
+        vel: np.ndarray = None,
+        rot_vel: np.ndarray = None,
+        ori: np.ndarray = None,
+    ):  # noqa D
         self._logger_name = "Mothership"
-        super().__init__(pos, fuel_level, StraightLineAutopilot, parent_logger,
-                         vel, rot_vel, ori)
+        super().__init__(
+            pos, fuel_level, StraightLineAutopilot, parent_logger, vel, rot_vel, ori
+        )
         self._cubesat_capacity = cubesat_capacity
         self._num_docked_cubesats = cubesat_capacity
 
@@ -57,12 +61,15 @@ class Mothership(Spacecraft):
     def dock_cubesat(self, craft: CubeSat) -> None:
         """Dock the cubesat."""
         self._logger.debug("Cubesat %s docked", craft.id)
-        self._logger.info("Cubesat docked with %s g of sample with value %s",
-                          craft.sample_weight, sum([s.value for s in craft.samples]))
+        self._logger.info(
+            "Cubesat docked with %s g of sample with value %s",
+            craft.sample_weight,
+            sum([s.value for s in craft.samples]),
+        )
         self._num_docked_cubesats += 1
 
     @property
-    def cubesat_capacity(self):  # noqa 
+    def cubesat_capacity(self):  # noqa
         return self._cubesat_capacity
 
     @property
