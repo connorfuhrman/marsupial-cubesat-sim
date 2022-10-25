@@ -114,7 +114,7 @@ def entrypoint(sim_history: list[SimulationHistory], fname: str = None):
             getdata,
             list(ax_map.keys()),
         ),
-        interval=1,
+        interval=10,
     )
     if fname is not None:
         with _animation_tqdm(total=max_max_iters, desc="Animation MP4 Save") as t:

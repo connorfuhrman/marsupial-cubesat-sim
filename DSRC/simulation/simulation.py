@@ -359,10 +359,11 @@ def _find_repeats(arr: np.ndarray) -> np.ndarray:
     return np.nonzero(res_mask)[0]
 
 
-def _test():
+def _test():  # noqa C901: I know the cyclomatic complexity is too large. This is just an intermediate test
     import argparse as ap
     from DSRC.simulation import animate_simulation
     from DSRC.simulation.communication import messages as msgs
+    from DSRC.simulation.utils import save_json_file
 
     parser = ap.ArgumentParser()
     parser.add_argument(
@@ -391,6 +392,11 @@ def _test():
     )
     parser.add_argument(
         "--no_animation", help="Don't do an animation just run", action="store_true"
+    )
+    parser.add_argument(
+        "--sim_history_save", help="JSON file to save the sim history",
+        type=str,
+        default="./sim_history.json"
     )
 
     args = parser.parse_args()
@@ -621,13 +627,21 @@ def _test():
             return SimulationActor.remote(config)
 
         ray.init()
-        resources = ray.available_resources()
-        ncpus = resources["CPU"]
-        sims = [make_actor(n) for n in range(args.num_workers)]
-        sims_history = ray.get([s.run.remote() for s in sims])
+        ncpus = int(ray.available_resources()['CPU'])
+        sims_history = []
+        while len(sims_history) != args.num_workers:
+            if (nprocs_left := args.num_workers - len(sims_history)) < ncpus:
+                n_to_launch = nprocs_left
+            else:
+                n_to_launch = ncpus
+            print(f"Launching {n_to_launch} Ray tasks")
+            sims = [make_actor(n) for n in range(n_to_launch)]
+            sims_history.extend(ray.get([s.run.remote() for s in sims]))
         if not args.no_animation:
             print(f"Animating {args.num_workers} simulations")
             animate_simulation(sims_history, args.mp4_file)
+        to_save = {s['metadata']['id']: s for s in sims_history}
+        save_json_file(to_save, args.sim_history_save)
     else:
         try:
             sim = Simulation(config)

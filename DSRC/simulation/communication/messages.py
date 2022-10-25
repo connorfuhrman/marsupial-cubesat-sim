@@ -10,10 +10,10 @@ MessageData class) for valid type hints during development and better support
 from static anlysis tools.
 """
 
-import json
 from typing import TypedDict, Union
 from dataclasses import dataclass
 import numpy as np
+from DSRC.simulation.utils import to_json
 
 
 class MessageData(TypedDict):
@@ -25,17 +25,6 @@ class MessageData(TypedDict):
     """ID of the receiver."""
     timestamp: float
     """Sim timestamp when Tx started."""
-
-
-class _NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
-
-
-def _json_dumps(obj):
-    return json.dumps(obj, cls=_NumpyEncoder)
 
 
 @dataclass(init=False)
@@ -81,7 +70,7 @@ class Message:
     @property
     def msg_str(self) -> str:
         """Encode message dict into a string."""
-        return _json_dumps(self.msg)
+        return to_json(self.msg)
 
 
 class SpacecraftState(MessageData):

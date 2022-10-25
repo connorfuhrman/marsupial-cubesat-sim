@@ -84,7 +84,7 @@ class StraightLineAutopilot:
         elif self._waypoint_captured(pos):
             # Only if we've captured the tracking waypoint
             # should we calculate a new velocity vector
-            self._logger.info("Captured waypint at %s", self._tracking_waypnt)
+            self._logger.debug("Captured waypint at %s", self._tracking_waypnt)
             if self.num_waypoints == 0:
                 self._logger.debug("No more waypoints")
                 self._heading = np.zeros(3, dtype=float)
