@@ -522,8 +522,7 @@ def _test():
         return Sample(weight=np.random.uniform(5, 10),
                       value=np.random.uniform(1, 10),
                       position=np.random.uniform(-15, 15, 3),
-                      velocity=np.zeros(3, dtype=float))
-                      #velocity=np.random.uniform(-0.05, 0.05, 3))
+                      velocity=np.random.uniform(-0.05, 0.05, 3))
 
     max_sim_time_min = 10
 
@@ -533,10 +532,10 @@ def _test():
         # return (len(samples) == 0 and time > 1) or \
         #     time > max_sim_time_min * 60
         if len(crafts) == 1:
-            print("Cubesat docked!!")
+            logging.info("All cubesats docked!! Simulation ending.")
             return True
         elif time > max_sim_time_min * 60:
-            print("Timeout!")
+            logging.info("Timeout!")
             return True
         else:
             return False
