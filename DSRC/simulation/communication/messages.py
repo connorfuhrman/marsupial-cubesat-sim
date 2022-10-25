@@ -51,9 +51,9 @@ class Message:
         """
         if type(msg) is Message:
             msg = msg.msg
-        expected_keys = np.array(T.__annotations__.keys(), dtype=str)
-        msg_keys = np.array(msg.keys(), dtype=str)
-        return np.array_equal(expected_keys, msg_keys)
+        expected_keys = set(T.__annotations__.keys())
+        msg_keys = set(msg.keys())
+        return msg_keys == expected_keys
 
     @property
     def tx_id(self) -> str:  # noqa D
@@ -73,6 +73,31 @@ class Message:
         return to_json(self.msg)
 
 
+####################################################################################################
+# User-defined messages below.
+#
+# Each message must inherit from the MessageData class. The messages are all TypedDict's
+# and their type is used to disbatch from a general queue of Message type objects.
+# The Message.is_type method is used to determine if a dictionary is a certain message type.
+# Since a TypedDict is just a generic dictionary at runtime to determine if a message is
+# of a certain 'type' the dictionary's keys are compared to the expected keys from the
+# class definition's annotations.
+#
+# E.g., one can do
+#
+# m = get_some_msg()
+# dispatch = {
+#     SampleAquireCommand: some_func,
+#     SpacecraftState: another_func
+# }
+# for T, cb in dispatch.items():
+#     if Message.is_type(m, T):
+#         cb(m)
+#         break
+# raise TypeError
+#
+# Which tries to invoke a callback given a particular type.
+####################################################################################################
 class SpacecraftState(MessageData):
     """The state of a spacecraft.
 
