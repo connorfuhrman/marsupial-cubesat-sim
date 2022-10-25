@@ -29,8 +29,10 @@ def _update_plot(frame_num, datagetter, axs):
             positions = frame_data['craft_positions']
             for id, line in lines.items():
                 if id in positions:
+                    marker = "$c$" if frame_data['craft_types'][id] == "CubeSat" else "$M$"
                     line.set_data_3d(*positions[id])
                     line.set(alpha=1.0)
+                    line.set(marker=marker)
                 else:
                     line.set(alpha=0.0)
 
@@ -64,7 +66,7 @@ def _get_plot_layout(nplots: int) -> tuple[int, int]:
 
 def entrypoint(sim_history: list[SimulationHistory], fname: str = None):
     """Animate the results of a simulation."""
-    fig = plt.figure(figsize=(15, 10))
+    fig = plt.figure(figsize=(25, 15))
     ax_map = dict()
     max_max_iters = 0
     nplot_rows, nplot_cols = _get_plot_layout(len(sim_history))
