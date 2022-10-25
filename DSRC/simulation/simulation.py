@@ -79,9 +79,9 @@ class Sample:
         self.position += (float(dt) * self.velocity)
 
     def __eq__(self, o):  # noqa D
-        return (self.weight == o.weight and \
-                self.value == o.value and \
-                np.array_equal(self.position, o.position) and \
+        return (self.weight == o.weight and
+                self.value == o.value and
+                np.array_equal(self.position, o.position) and
                 np.array_equal(self.velocity, o.velocity))
 
 
