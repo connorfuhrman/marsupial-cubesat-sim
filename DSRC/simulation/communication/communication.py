@@ -27,7 +27,7 @@ class Spacecraft(Protocol):
         raise NotImplementedError()
 
     @property
-    def id(self) -> int: # noqa D
+    def id(self) -> int:  # noqa D
         raise NotImplementedError()
 
     def __eq__(self, o) -> bool:
@@ -61,11 +61,11 @@ class Transmission:
 
     @property
     def receiver(self) -> Spacecraft:  # noqa D
-        return self.msg.msg['rx_id']
+        return self.msg.msg["rx_id"]
 
     @property
     def sender(self) -> Spacecraft:  # noqa D
-        return self.msg.msg['tx_id']
+        return self.msg.msg["tx_id"]
 
 
 class SimulationManager:
@@ -84,25 +84,38 @@ class SimulationManager:
         self._logger = logging.getLogger(f"{parentLogger.name}.communication")
         self._transmissions = []
 
-    def update(self, simtime: mpf, dt: mpf, crafts: dict[str, Spacecraft]) -> dict[str, Spacecraft]:
+    def update(
+        self, simtime: mpf, dt: mpf, crafts: dict[str, Spacecraft]
+    ) -> dict[str, Spacecraft]:
         """Update one timestep."""
         remaining = []
         for t in self._transmissions:
             if t.update(dt, crafts):
                 crafts[t.receiver].receive_msg(t.msg, simtime)
-                self._logger.debug("Message from %s to %s delivered at %s",
-                                   t.receiver, t.sender, simtime)
+                self._logger.debug(
+                    "Message from %s to %s delivered at %s",
+                    t.receiver,
+                    t.sender,
+                    simtime,
+                )
             else:
                 remaining.append(t)
         self._transmissions = remaining
         if len(self._transmissions) > 0:
-            self._logger.debug("There are now %s active transmissions after update at %s.",
-                               len(self._transmissions), simtime)
+            self._logger.debug(
+                "There are now %s active transmissions after update at %s.",
+                len(self._transmissions),
+                simtime,
+            )
         return crafts
 
     def send_msg(self, msg: Message, rx, tx):
         """Start a transmission."""
         self._transmissions.append(Transmission(msg))
-        self._logger.debug("Queuing message send from %s to %s. "
-                           "There are now %s messages being send",
-                           rx.id, tx.id, len(self._transmissions))
+        self._logger.debug(
+            "Queuing message send from %s to %s. "
+            "There are now %s messages being send",
+            rx.id,
+            tx.id,
+            len(self._transmissions),
+        )

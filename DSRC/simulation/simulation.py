@@ -183,7 +183,7 @@ class Simulation(ABC):
             "total_iters": 0,
             "craft_ids": set(self.crafts.keys()),
             "id": self.id,
-            "time_start": now
+            "time_start": now,
         }
 
         self._simlogger.debug(

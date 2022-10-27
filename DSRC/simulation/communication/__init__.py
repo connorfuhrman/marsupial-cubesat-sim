@@ -17,10 +17,14 @@ import DSRC.simulation.communication.messages
 
 # _msgs_mod = 'DSRC.simulation.communication.messages'
 _msgs_mod = importlib.import_module("DSRC.simulation.communication.messages")
-_classes = [cls_name for cls_name, cls_obj in inspect.getmembers(_msgs_mod) if inspect.isclass(cls_obj)]
-_classes = filter(lambda c: c != 'Message' and c != 'MessageData', _classes)
+_classes = [
+    cls_name
+    for cls_name, cls_obj in inspect.getmembers(_msgs_mod)
+    if inspect.isclass(cls_obj)
+]
+_classes = filter(lambda c: c != "Message" and c != "MessageData", _classes)
 
-MessageData_cls = getattr(_msgs_mod, 'MessageData')
+MessageData_cls = getattr(_msgs_mod, "MessageData")
 MessageData_keys = list(MessageData_cls.__annotations__.keys())
 
 
@@ -36,8 +40,11 @@ def _class_same(c1, c2, attr):
             raise ImportError("Somehow got repeated TypedDict keys")
         for m in MessageData_keys:
             if m not in c:
-                raise ImportError(f"{m} is not found in the keys of {cls}. "
-                                  "Does this type inherit from MessageData as it should?")
+                raise ImportError(
+                    f"{m} is not found in the keys of {cls}. "
+                    "Does this type inherit from MessageData as it should?"
+                )
+
     c1_mems, nc1_mems = get(c1, attr)
     c2_mems, nc2_mems = get(c2, attr)
 
@@ -52,13 +59,15 @@ for c1, c2 in itertools.combinations(_classes, 2):
     cls2 = getattr(_msgs_mod, c2)
 
     def mem_names_same():  # noqa D
-        return _class_same(cls1, cls2, 'keys')
+        return _class_same(cls1, cls2, "keys")
 
     if mem_names_same():
-        raise ImportError(f"Classes {c1} and {c2} have identical keys: {list(cls1.__annotations__.keys())}. "
-                          "This is not consistent with the requirements since "
-                          "the DSRC communication simulation backend checks if "
-                          "a dictionary has the same keys as a TypedDict to "
-                          "determine if it's of a given type. "
-                          "You need to update the message type so that it's keys "
-                          "are not identical to another message type.")
+        raise ImportError(
+            f"Classes {c1} and {c2} have identical keys: {list(cls1.__annotations__.keys())}. "
+            "This is not consistent with the requirements since "
+            "the DSRC communication simulation backend checks if "
+            "a dictionary has the same keys as a TypedDict to "
+            "determine if it's of a given type. "
+            "You need to update the message type so that it's keys "
+            "are not identical to another message type."
+        )

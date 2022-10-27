@@ -7,7 +7,6 @@ with open("./requirements.txt") as f:
     reqs = [l for l in f.read().splitlines() if not l.startswith("#")]
 
 
-
 setup(
     name="DSRC",
     version="0.1",

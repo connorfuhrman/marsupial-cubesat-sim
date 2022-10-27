@@ -2,6 +2,7 @@
 
 import numpy as np
 
+
 class Sample:
     """Standin as a sample class for now."""
 

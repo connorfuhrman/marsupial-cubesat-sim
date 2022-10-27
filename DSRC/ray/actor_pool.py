@@ -15,11 +15,13 @@ class ActorPool:
     have run.
     """
 
-    def __init__(self,
-                 make_actor: callable,
-                 run_actor: callable,
-                 n_experiments: int,
-                 n_concurrent: int = -1):
+    def __init__(
+        self,
+        make_actor: callable,
+        run_actor: callable,
+        n_experiments: int,
+        n_concurrent: int = -1,
+    ):
         """Initialize the actor pool.
 
         The pool needs some callable to make an actor and another
@@ -33,17 +35,19 @@ class ActorPool:
         """
         if not ray.is_initialized():
             if not self.supress_init_warn:
-                warnings.warn("Initializing ray without arguments. "
-                              "If custom initialization is required then "
-                              "initialize Ray before constructing this object. "
-                              "Export ACTOR_POOL_NO_RAY_INIT_WARN=1 to supress")
+                warnings.warn(
+                    "Initializing ray without arguments. "
+                    "If custom initialization is required then "
+                    "initialize Ray before constructing this object. "
+                    "Export ACTOR_POOL_NO_RAY_INIT_WARN=1 to supress"
+                )
             ray.init()
 
         self._make_actor = make_actor
         self._run_actor = run_actor
         self._n_experiments = n_experiments
         if n_concurrent == -1:
-            n_concurrent = int(ray.available_resources()['CPU'])
+            n_concurrent = int(ray.available_resources()["CPU"])
         self._n_concurrent = n_concurrent
 
         self._refs_to_actors = dict()
@@ -82,7 +86,7 @@ class ActorPool:
             return False
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import time
     import numpy as np
 
@@ -123,15 +127,15 @@ if __name__ == '__main__':
             self.idx %= len(self.msgs)
             return a
 
-    msgs = ["Hello world",
-            "from the test",
-            "of the ray actor pool!",
-            "(these messages will not appear in order)"]
+    msgs = [
+        "Hello world",
+        "from the test",
+        "of the ray actor pool!",
+        "(these messages will not appear in order)",
+    ]
     creator = StatefulTestActorCreator(msgs)
 
-    pool = ActorPool(creator,
-                     lambda a: a.do_something.remote(),
-                     n_experiments=25)
+    pool = ActorPool(creator, lambda a: a.do_something.remote(), n_experiments=25)
 
     res = pool.run()
     print(f"Got results {res}")

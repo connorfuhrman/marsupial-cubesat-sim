@@ -7,6 +7,7 @@ import numpy as np
 import json
 from mpmath import mpf
 
+
 class _Encoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
@@ -25,10 +26,12 @@ def to_json(obj):
     """
     return json.dumps(obj, cls=_Encoder)
 
+
 def save_json_file(obj, filename):
     """Save a JSON to a file with a numpy-aware encoder."""
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         json.dump(obj, f, cls=_Encoder)
+
 
 def distance_to_samples(craft, samples) -> list:
     """Get the distance to all samples."""
