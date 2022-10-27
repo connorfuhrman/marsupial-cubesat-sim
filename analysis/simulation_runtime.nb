@@ -1,0 +1,420 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 12.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       158,          7]
+NotebookDataLength[     16420,        412]
+NotebookOptionsPosition[     15299,        387]
+NotebookOutlinePosition[     15640,        402]
+CellTagsIndexPosition[     15597,        399]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"GetData", "[", "fname_", "]"}], " ", ":=", " ", 
+  RowBox[{"Module", "[", 
+   RowBox[{
+    RowBox[{"{", 
+     RowBox[{
+      RowBox[{"f", "=", "fname"}], ",", " ", "json", ",", " ", "mdata"}], 
+     "}"}], ",", "\[IndentingNewLine]", 
+    RowBox[{
+     RowBox[{"json", " ", "=", " ", 
+      RowBox[{"Import", "[", 
+       RowBox[{"fname", ",", " ", "\"\<RawJSON\>\""}], "]"}]}], ";", 
+     "\[IndentingNewLine]", 
+     RowBox[{"mdata", "=", 
+      RowBox[{"json", "[", 
+       RowBox[{"[", "\"\<metadata\>\"", "]"}], "]"}]}], ";", 
+     "\[IndentingNewLine]", 
+     RowBox[{"<|", 
+      RowBox[{
+       RowBox[{"\"\<num_crafts\>\"", "\[Rule]", " ", 
+        RowBox[{"mdata", "[", 
+         RowBox[{"[", "\"\<max_num_crafts\>\"", "]"}], "]"}]}], ",", " ", 
+       RowBox[{"\"\<num_samples\>\"", "\[Rule]", " ", 
+        RowBox[{"mdata", "[", 
+         RowBox[{"[", "\"\<max_num_samples\>\"", "]"}], "]"}]}], ",", " ", 
+       RowBox[{"\"\<sim_time\>\"", " ", "\[Rule]", " ", 
+        RowBox[{"mdata", "[", 
+         RowBox[{"[", "\"\<sim_time\>\"", "]"}], "]"}]}], ",", " ", 
+       RowBox[{"\"\<elapsed_time\>\"", " ", "\[Rule]", " ", 
+        RowBox[{
+         RowBox[{"mdata", "[", 
+          RowBox[{"[", "\"\<time_end\>\"", "]"}], "]"}], "-", 
+         RowBox[{"mdata", "[", 
+          RowBox[{"[", "\"\<time_start\>\"", "]"}], "]"}]}]}]}], "|>"}]}]}], 
+   "\[IndentingNewLine]", "]"}]}]], "Input",
+ CellChangeTimes->{{3.875838612635482*^9, 3.875838613587245*^9}, {
+  3.875838664978203*^9, 3.87583866518253*^9}, {3.875838697329137*^9, 
+  3.8758388739679413`*^9}, {3.8758389307693853`*^9, 3.875839040906909*^9}, {
+  3.8758397906794653`*^9, 3.875839795889374*^9}, {3.8758405222881193`*^9, 
+  3.8758405249358177`*^9}},
+ CellLabel->
+  "In[166]:=",ExpressionUUID->"6ae645ae-946f-45c8-b0f8-56e7a0d2c0cd"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"dataFiles", " ", "=", " ", 
+   RowBox[{"FileNames", "[", 
+    RowBox[{"\"\<*.json\>\"", ",", 
+     RowBox[{
+      RowBox[{"NotebookDirectory", "[", "]"}], "<>", 
+      "\"\<../experiment_results/\>\""}], ",", "Infinity"}], " ", "]"}]}], 
+  ";"}]], "Input",
+ CellChangeTimes->{{3.875839238373279*^9, 3.875839240533676*^9}, {
+  3.8758393274787273`*^9, 3.875839451712528*^9}, {3.875839504258037*^9, 
+  3.875839567753599*^9}, {3.875839613426629*^9, 3.8758396364886436`*^9}},
+ CellLabel->
+  "In[167]:=",ExpressionUUID->"1d7f9240-1fbe-4b8c-bb8e-c48cd403b8c1"],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"simData", " ", "=", " ", 
+   RowBox[{"ParallelMap", "[", 
+    RowBox[{"GetData", ",", " ", "dataFiles"}], "]"}]}], ";", " ", 
+  RowBox[{"(*", 
+   RowBox[{
+    RowBox[{"GetData", "/@", "dataFiles"}], ";"}], "*)"}], 
+  "\[IndentingNewLine]", 
+  RowBox[{"numDPoint", "=", 
+   RowBox[{"Length", "[", "simData", "]"}]}]}]], "Input",
+ CellChangeTimes->{{3.8758397089377117`*^9, 3.875839715859305*^9}, {
+  3.875839754228973*^9, 3.875839758974024*^9}, {3.8758400573488903`*^9, 
+  3.875840060461371*^9}, {3.87584084824371*^9, 3.87584086358687*^9}, {
+  3.875840906846251*^9, 3.875840921293865*^9}},
+ CellLabel->
+  "In[168]:=",ExpressionUUID->"8b4b9df1-c1b6-4df9-bb01-0bc533416f1f"],
+
+Cell[BoxData["50"], "Output",
+ CellChangeTimes->{
+  3.875840879275323*^9, {3.875840972886154*^9, 3.875841026655239*^9}},
+ CellLabel->
+  "Out[168]=",ExpressionUUID->"af6441f5-56a0-4161-96c6-f197968cd4e0"]
+}, Open  ]],
+
+Cell[CellGroupData[{
+
+Cell[BoxData[{
+ RowBox[{"ListLinePlot", "[", "\[IndentingNewLine]", "\t", 
+  RowBox[{
+   RowBox[{"Values", "[", 
+    RowBox[{"simData", "[", 
+     RowBox[{"[", 
+      RowBox[{"All", ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"\"\<num_crafts\>\"", ",", " ", "\"\<sim_time\>\""}], "}"}]}],
+       "]"}], "]"}], "]"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"Joined", "\[Rule]", "False"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"PlotLabel", "\[Rule]", "\"\<Number of Crafts vs Sim Time\>\""}], 
+   ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"FrameLabel", "\[Rule]", 
+    RowBox[{"{", 
+     RowBox[{
+     "\"\<Number of crafts\>\"", ",", " ", "\"\<Simulation time [sec]\>\""}], 
+     "}"}]}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"PlotTheme", "\[Rule]", "\"\<Scientific\>\""}]}], 
+  "]"}], "\[IndentingNewLine]", 
+ RowBox[{"ListLinePlot", "[", "\[IndentingNewLine]", "\t", 
+  RowBox[{
+   RowBox[{"Values", "[", 
+    RowBox[{"simData", "[", 
+     RowBox[{"[", 
+      RowBox[{"All", ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"\"\<sim_time\>\"", ",", " ", "\"\<elapsed_time\>\""}], 
+        "}"}]}], "]"}], "]"}], "]"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"Joined", "\[Rule]", "False"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{
+   "PlotLabel", "\[Rule]", "\"\<Simulation Time vs Elapsed Time\>\""}], ",", 
+   "\[IndentingNewLine]", "\t", 
+   RowBox[{"FrameLabel", "\[Rule]", 
+    RowBox[{"{", 
+     RowBox[{
+     "\"\<Simulation time [sec]\>\"", ",", " ", 
+      "\"\<Elapsed time [sec]\>\""}], "}"}]}], ",", "\[IndentingNewLine]", 
+   "\t", 
+   RowBox[{"PlotTheme", "\[Rule]", "\"\<Scientific\>\""}]}], 
+  "]"}], "\[IndentingNewLine]", 
+ RowBox[{"ListLinePlot", "[", "\[IndentingNewLine]", "\t", 
+  RowBox[{
+   RowBox[{"Values", "[", 
+    RowBox[{"simData", "[", 
+     RowBox[{"[", 
+      RowBox[{"All", ",", " ", 
+       RowBox[{"{", 
+        RowBox[{"\"\<num_crafts\>\"", ",", " ", "\"\<elapsed_time\>\""}], 
+        "}"}]}], "]"}], "]"}], "]"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"Joined", "\[Rule]", "False"}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{
+   "PlotLabel", "\[Rule]", "\"\<Number of crafts vs Elapsed Time\>\""}], ",", 
+   "\[IndentingNewLine]", "\t", 
+   RowBox[{"FrameLabel", "\[Rule]", 
+    RowBox[{"{", 
+     RowBox[{
+     "\"\<Number of crafts\>\"", ",", " ", "\"\<Elapsed time [sec]\>\""}], 
+     "}"}]}], ",", "\[IndentingNewLine]", "\t", 
+   RowBox[{"PlotTheme", "\[Rule]", "\"\<Scientific\>\""}]}], "]"}]}], "Input",\
+
+ CellChangeTimes->{{3.8758402409144583`*^9, 3.875840353491311*^9}, {
+  3.875840440182118*^9, 3.8758404910734653`*^9}, {3.875840566802582*^9, 
+  3.875840640223723*^9}, {3.875840731082466*^9, 3.875840752337274*^9}, {
+  3.87584078415491*^9, 3.875840823286499*^9}},
+ CellLabel->
+  "In[169]:=",ExpressionUUID->"1742dc12-8744-4d93-a975-801422ab532d"],
+
+Cell[BoxData[
+ GraphicsBox[{{}, {
+    {RGBColor[0.9, 0.36, 0.054], PointSize[
+      NCache[
+       Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+     CapForm["Butt"], PointBox[CompressedData["
+1:eJxdkt8rQ2EYx8eu1WQXZ1mZk7RYW3OkRPYopd1ISlxJtONCocy7lnLDkjsu
+pyjtyqX4A9TKjcM/oJXlYhcuEFPyI+dre94nO3V6+vb9vN/3fZ737VxYnUo1
+ezyePvdHrX0+SvRbluXNUE2HaPswn89nVV1HqIAyv1HX3VR1ceuOdZBOwL8I
+X0aZVZpfhh9Qmq/eOI6T5v16GvJDtAt+j/koZcHvsO+njia3TPJ6gxaXbNu+
+UjrvCecrMh+mAPxj1hFqgV6RvCHkXWa03wp/i30fxeDvs99FJeRvip8APyD9
+x6F/2DcoBv0u/Z2inzGl8wrQEaXzcuAnMlqPY/9nmVcS/pzwD3/r2Tcpjvu8
+Zj9M3y5uR6XfJPxeue9R5I0wb1AJ8y+zH6Rz6EHWUZrGfm9pfZ5PzOOV8006
+AH8m9zED/iut1+egL+Q+jqD98j6KKPfy3hrfUwVljbWfUjj/rfT7gfM8Sr8V
+5A/L/P7Pw6R2zGNd1nuh2xT9Ai2HubU=
+      "]]}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}}, {{}, {}}},
+  AspectRatio->NCache[GoldenRatio^(-1), 0.6180339887498948],
+  Axes->{False, False},
+  AxesLabel->{None, None},
+  AxesOrigin->{3.770833333333334, 332.65000000000714`},
+  DisplayFunction->Identity,
+  Frame->{{True, True}, {True, True}},
+  FrameLabel->{{
+     FormBox["\"Simulation time [sec]\"", TraditionalForm], None}, {
+     FormBox["\"Number of crafts\"", TraditionalForm], None}},
+  FrameStyle->Automatic,
+  FrameTicks->{{Automatic, Automatic}, {Automatic, Automatic}},
+  GridLines->{{0}, {0}},
+  GridLinesStyle->Directive[
+    GrayLevel[0.5, 0.4]],
+  LabelStyle->{FontFamily -> "Times"},
+  Method->{
+   "OptimizePlotMarkers" -> True, 
+    "CoordinatesToolOptions" -> {"DisplayFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& ), "CopiedValueFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& )}},
+  PlotLabel->FormBox["\"Number of Crafts vs Sim Time\"", TraditionalForm],
+  PlotRange->{{3.770833333333334, 15.}, {332.65000000000714`, 
+   383.0000000000186}},
+  PlotRangeClipping->True,
+  PlotRangePadding->{{
+     Scaled[0.02], 
+     Scaled[0.02]}, {
+     Scaled[0.05], 
+     Scaled[0.05]}},
+  Ticks->{Automatic, Automatic}]], "Output",
+ CellChangeTimes->{{3.8758402529940767`*^9, 3.8758402629962683`*^9}, {
+   3.875840319663698*^9, 3.875840353741696*^9}, 3.87584049142873*^9, {
+   3.875840554186475*^9, 3.875840640936736*^9}, 3.8758407694164886`*^9, 
+   3.875840824483279*^9, 3.87584088059344*^9, 3.8758410267715816`*^9},
+ CellLabel->
+  "Out[169]=",ExpressionUUID->"4fab0442-959d-4b92-9fd5-d77cb20ce645"],
+
+Cell[BoxData[
+ GraphicsBox[{{}, {
+    {RGBColor[0.9, 0.36, 0.054], PointSize[
+      NCache[
+       Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+     CapForm["Butt"], PointBox[CompressedData["
+1:eJxNkl1I01EYxv/byPbRZnNjH3nh1kVGC9dcCaNoj1CEDMoGrSiQ9eG6CEpo
+WVLUsEZ4t7qJ9cVK6AO6yOo2EgZiZLILITAUpcCLJBdpUZr0f95zs4s///Pw
+/N7nPec9J3jiXLLbqGlaq/7xH98ejUZNF6EvkdqyHL9+t1gs9vVSD4+2mTGo
+L7T0BerCJosTSzoe/Swab0MOPCL/Q3gtEVyDWS6OiO4Zja3HGfp+lefN27H0
+cWxsLCv90u+Tltr8UuqaCzfJDwif+x2yoY/8DdVv5ZkLTQZ91Sn1Wu/kavzk
+6UwmM6L4zUedWOD+yop/Me2Hn/5D0YGvXT7Yqc8qfe+JDzuZN6zy6v9a4KR/
+VfzclW2NCNMviB9I3V+LKeZfFv/lSNKLOPk26Q/3Rjsi1KtqXnfiQYSpf6m8
+4ykNz3mePcJXpo0eDFJvVfPqX/AiT36/6tfSbMM+9q8qXWm1ooN+l/CF7IAH
+X6Re+QcTZkR4nx/Er+6tevBPxzMt0n/GM+lDB/2Q4scv1aOdebvV/R2bWIcp
+zn9W/Nyn2wa8po6p+ZS+W3GI/Raz1J0HFt1Y5jx+qvNOvHLhFvkhlRdLWnGY
+/IrwpcftDchTvxG+8q7fiwfUbuEDEZMfZRbOiJ+eP1VX+54C4YY6zFH3qPc0
+ZDOim/sfF53OjDvwh/v5puadeLoBc8zfpc7brL+PmnnkysYmNHIe56W+ZN1h
+honape5z3uDAf1lw+VQ=
+      "]]}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}}, {{}, {}}},
+  AspectRatio->NCache[GoldenRatio^(-1), 0.6180339887498948],
+  Axes->{False, False},
+  AxesLabel->{None, None},
+  AxesOrigin->{334.3062500000076, 0},
+  DisplayFunction->Identity,
+  Frame->{{True, True}, {True, True}},
+  FrameLabel->{{
+     FormBox["\"Elapsed time [sec]\"", TraditionalForm], None}, {
+     FormBox["\"Simulation time [sec]\"", TraditionalForm], None}},
+  FrameStyle->Automatic,
+  FrameTicks->{{Automatic, Automatic}, {Automatic, Automatic}},
+  GridLines->{{0}, {0}},
+  GridLinesStyle->Directive[
+    GrayLevel[0.5, 0.4]],
+  LabelStyle->{FontFamily -> "Times"},
+  Method->{
+   "OptimizePlotMarkers" -> True, 
+    "CoordinatesToolOptions" -> {"DisplayFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& ), "CopiedValueFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& )}},
+  PlotLabel->FormBox["\"Simulation Time vs Elapsed Time\"", TraditionalForm],
+  PlotRange->{{334.3062500000076, 383.0000000000186}, {0, 8.624203205108643}},
+  
+  PlotRangeClipping->True,
+  PlotRangePadding->{{
+     Scaled[0.02], 
+     Scaled[0.02]}, {
+     Scaled[0.02], 
+     Scaled[0.05]}},
+  Ticks->{Automatic, Automatic}]], "Output",
+ CellChangeTimes->{{3.8758402529940767`*^9, 3.8758402629962683`*^9}, {
+   3.875840319663698*^9, 3.875840353741696*^9}, 3.87584049142873*^9, {
+   3.875840554186475*^9, 3.875840640936736*^9}, 3.8758407694164886`*^9, 
+   3.875840824483279*^9, 3.87584088059344*^9, 3.875841026825234*^9},
+ CellLabel->
+  "Out[170]=",ExpressionUUID->"7f714f8d-2b92-42dc-878d-cda3d3158ff0"],
+
+Cell[BoxData[
+ GraphicsBox[{{}, {
+    {RGBColor[0.9, 0.36, 0.054], PointSize[
+      NCache[
+       Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+     CapForm["Butt"], PointBox[CompressedData["
+1:eJxTTMoPSmViYGAwAmIQDQECDkDCIUzrtz2ErwDiHzhhxuEA4euA6AlqnIJQ
+vhpY/V5tPihfBkx7K7Iiqy84YSmArP6AeCsvsvqEk0GcUL4WiF4QVi/sgGR/
+w3dtbihfD2zfnxUweREwXXbrH9S9EmD1GlEw94HNc1hzTxLK1wDRCk/iJJDd
+pzB7GYwPMY//FyeyfEONgbQDUvgohM1hh/JVQPSGY0HiyPIOIkq8yPonTLdX
+dEB2X2IYA7L/LtxjEkM2r6DpPYp5Cnrq3Cj8C0ZcyP6bUNIphiIf6A2LLyUQ
+/cH1A0we7P8HYrdQ/KtwroIf2T0M0Vd4UNx7fRIjlA+J3wXvYPaD4yPA/4sI
+inuubILFD9h+BssgFPcuWOQohKz/wv4mmH8h8WHIDIsvSPp4k8IG5YPTj4K+
+EAr/wEZuJmT/JKSdg6VHsH8bvJdLofhXHTV9NBxmkkd27wIuUw5k/Q5vGPkc
+ACl1Z18=
+      "]]}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}, {
+     {RGBColor[0.9, 0.36, 0.054], PointSize[
+       NCache[
+        Rational[1, 60], 0.016666666666666666`]], AbsoluteThickness[1.6], 
+      CapForm["Butt"]}, {}}}, {{}, {}}},
+  AspectRatio->NCache[GoldenRatio^(-1), 0.6180339887498948],
+  Axes->{False, False},
+  AxesLabel->{None, None},
+  AxesOrigin->{3.770833333333334, 0},
+  DisplayFunction->Identity,
+  Frame->{{True, True}, {True, True}},
+  FrameLabel->{{
+     FormBox["\"Elapsed time [sec]\"", TraditionalForm], None}, {
+     FormBox["\"Number of crafts\"", TraditionalForm], None}},
+  FrameStyle->Automatic,
+  FrameTicks->{{Automatic, Automatic}, {Automatic, Automatic}},
+  GridLines->{{0}, {0}},
+  GridLinesStyle->Directive[
+    GrayLevel[0.5, 0.4]],
+  LabelStyle->{FontFamily -> "Times"},
+  Method->{
+   "OptimizePlotMarkers" -> True, 
+    "CoordinatesToolOptions" -> {"DisplayFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& ), "CopiedValueFunction" -> ({
+        (Identity[#]& )[
+         Part[#, 1]], 
+        (Identity[#]& )[
+         Part[#, 2]]}& )}},
+  PlotLabel->FormBox["\"Number of crafts vs Elapsed Time\"", TraditionalForm],
+  
+  PlotRange->{{3.770833333333334, 15.}, {0, 8.624203205108643}},
+  PlotRangeClipping->True,
+  PlotRangePadding->{{
+     Scaled[0.02], 
+     Scaled[0.02]}, {
+     Scaled[0.02], 
+     Scaled[0.05]}},
+  Ticks->{Automatic, Automatic}]], "Output",
+ CellChangeTimes->{{3.8758402529940767`*^9, 3.8758402629962683`*^9}, {
+   3.875840319663698*^9, 3.875840353741696*^9}, 3.87584049142873*^9, {
+   3.875840554186475*^9, 3.875840640936736*^9}, 3.8758407694164886`*^9, 
+   3.875840824483279*^9, 3.87584088059344*^9, 3.87584102687501*^9},
+ CellLabel->
+  "Out[171]=",ExpressionUUID->"916c2ba4-6174-4230-b2d9-467ce939af73"]
+}, Open  ]],
+
+Cell[BoxData[" "], "Input",
+ CellChangeTimes->{
+  3.875841056322116*^9},ExpressionUUID->"6597c11f-4a39-41b5-97cc-\
+5d15d01b4ebe"]
+},
+WindowSize->{1111, 1162},
+WindowMargins->{{57, Automatic}, {Automatic, -368}},
+FrontEndVersion->"12.0 for Mac OS X x86 (64-bit) (April 8, 2019)",
+StyleDefinitions->"Default.nb"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[558, 20, 1837, 42, 136, "Input",ExpressionUUID->"6ae645ae-946f-45c8-b0f8-56e7a0d2c0cd"],
+Cell[2398, 64, 588, 13, 30, "Input",ExpressionUUID->"1d7f9240-1fbe-4b8c-bb8e-c48cd403b8c1"],
+Cell[CellGroupData[{
+Cell[3011, 81, 706, 16, 52, "Input",ExpressionUUID->"8b4b9df1-c1b6-4df9-bb01-0bc533416f1f"],
+Cell[3720, 99, 203, 4, 34, "Output",ExpressionUUID->"af6441f5-56a0-4161-96c6-f197968cd4e0"]
+}, Open  ]],
+Cell[CellGroupData[{
+Cell[3960, 108, 2855, 66, 388, "Input",ExpressionUUID->"1742dc12-8744-4d93-a975-801422ab532d"],
+Cell[6818, 176, 2726, 65, 260, "Output",ExpressionUUID->"4fab0442-959d-4b92-9fd5-d77cb20ce645"],
+Cell[9547, 243, 2938, 69, 265, "Output",ExpressionUUID->"7f714f8d-2b92-42dc-878d-cda3d3158ff0"],
+Cell[12488, 314, 2663, 65, 265, "Output",ExpressionUUID->"916c2ba4-6174-4230-b2d9-467ce939af73"]
+}, Open  ]],
+Cell[15166, 382, 129, 3, 30, "Input",ExpressionUUID->"6597c11f-4a39-41b5-97cc-5d15d01b4ebe"]
+}
+]
+*)
+

@@ -2,12 +2,13 @@
 
 from typing import TypedDict
 import numpy as np
+from mpmath import mpf
 
 
 class SimulationHistoryTimestep(TypedDict):
     """A representation of one timestep in the simulation."""
 
-    time: float
+    time: mpf
     """Simulation time."""
     craft_positions: dict[str, np.ndarray]
     """Mapping between Id and position at this timestep."""
@@ -24,12 +25,24 @@ class SimulationHistoryMData(TypedDict):
     """The maximum number of crafts in the sim at one time."""
     max_num_samples: int
     """The maximum number of samples over all iters."""
-    total_iters: int
-    """How many iterations were completed."""
     craft_ids: set[str]
     """All craft IDs that appeared in the simulation."""
     id: str
     """The ID of the simulation."""
+    total_iters: int
+    """How many iterations were completed."""
+    time_start: float
+    """Epoch time (seconds) at sim start.
+
+    Specifically this is at sim construction time.
+    """
+    time_end: float
+    """Epoch time (seconds) at sim end.
+
+    Specifically, this is right before returning.
+    """
+    sim_time: mpf
+    """Total simulated seconds."""
 
 
 class SimulationHistory(TypedDict):

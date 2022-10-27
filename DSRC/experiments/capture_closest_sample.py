@@ -35,7 +35,7 @@ class Experiment(Simulation):
         self._cs_sample_assignments = dict()
         if logger is None:
             # Assume this is made within a Ray actor
-            logging.basicConfig(level=logging.INFO)
+            logging.basicConfig(level=logging.ERROR)
             self._logger = logging.getLogger()
         else:
             self._logger = logger
@@ -216,6 +216,11 @@ if __name__ == '__main__':
             help="Don't render an animation",
             action="store_true"
         )
+        parser.add_argument(
+            "--no_save",
+            help="Don't save results to file",
+            action="store_true"
+        )
 
         args = parser.parse_args()
 
@@ -263,11 +268,12 @@ if __name__ == '__main__':
             from DSRC.simulation import animate_simulation
             animate_simulation(res)
 
-        for i, r in enumerate(res):
-            save_path = Path(f"experiment_results/run_{i}")
-            save_path.mkdir(parents=True, exist_ok=True)
-            save_json_file(r, save_path/"results.json")
-            with open(save_path/"results.pkl", 'wb') as f:
-                pickle.dump(r, f)
+        if not args.no_save:
+            for i, r in enumerate(res):
+                save_path = Path(f"experiment_results/run_{i}")
+                save_path.mkdir(parents=True, exist_ok=True)
+                save_json_file(r, save_path/"results.json")
+                with open(save_path/"results.pkl", 'wb') as f:
+                    pickle.dump(r, f)
 
     main()
