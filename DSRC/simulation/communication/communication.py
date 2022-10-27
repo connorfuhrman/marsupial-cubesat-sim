@@ -1,8 +1,10 @@
 """Model the act of spacecraft communication."""
 
-from DSRC.simulation.communication import CommunicationLink
 from typing import Protocol
 from dataclasses import dataclass
+import logging
+import numpy as np
+from mpmath import mpf
 
 
 class Message(Protocol):
@@ -16,61 +18,54 @@ class Message(Protocol):
         raise NotImplementedError()
 
 
+class Spacecraft(Protocol):
+    """Spacecraft protocol."""
+
+    @property
+    def position(self) -> np.ndarray:
+        """Spacecraft has a position."""
+        raise NotImplementedError()
+
+    @property
+    def id(self) -> int: # noqa D
+        raise NotImplementedError()
+
+    def __eq__(self, o) -> bool:
+        """Able the determine equality."""
+        raise NotImplementedError()
+
+
 @dataclass(init=False)
 class Transmission:
     """A message being transmitted."""
 
     msg: Message
     """The message being send."""
-    remaining_bytes: float
+    remaining_bytes: mpf
     """How many bytes left are there in the transmission."""
-    link: CommunicationLink
-    """The comm link used for this transmission."""
 
-    def __init__(self, msg, link):  # noqa D
+    def __init__(self, msg):  # noqa D
         self.msg = msg
-        self.remaining_bytes = msg.size
-        self.link = link
+        self.remaining_bytes = mpf(msg.size)
 
-    def update(self, dt: float) -> bool:
+    def update(self, dt: mpf, crafts: dict[str, Spacecraft]) -> bool:
         """Do more of the transmission between sim steps.
 
         Returns True if the transmission is done.
         """
-        self.remaining_bytes -= float(self.link.datarate) * dt
+        # TODO determine if the transmission is active!
+        # TODO define a datarate
+        datrate = mpf(10e6)
+        self.remaining_bytes -= datrate * dt
         return self.remaining_bytes <= 0.0
 
     @property
-    def receiver(self) -> "Spacecraft":
-        """Get the spacecraft object."""
-        id = self.msg.msg["tx_id"]
-        if (s1 := self.link.s1).id == id:
-            return s1
-        elif (s2 := self.link.s2).id == id:
-            return s2
-        else:
-            raise RuntimeError("Cannot find the right spacecrft obj")
+    def receiver(self) -> Spacecraft:  # noqa D
+        return self.msg.msg['rx_id']
 
-    def __key(self):
-        """Create hashing tuple.
-
-        The hashing tuple is unique since each message
-        will have a timestamp then some more data.
-        If you send duplicates of the same exact message
-        this will cause a collision. Note that in this case
-        then
-        """
-        return self.msg.msg_str
-
-    def __eq__(self, o):
-        """Equality based on the hash val."""
-        if type(o) is Transmission:
-            return self.__key() == o.__key()
-        raise NotImplementedError
-
-    def __hash__(self):
-        """Has based on our hasing tuple."""
-        return hash(self.__key())
+    @property
+    def sender(self) -> Spacecraft:  # noqa D
+        return self.msg.msg['tx_id']
 
 
 class SimulationManager:
@@ -81,57 +76,33 @@ class SimulationManager:
     link is reformed without any loss of data.
     """
 
-    _active_transmissions: set[Transmission]
-    _interrupted_transmissions: set[Transmission]
+    _logger: logging.Logger
+    _transmissions: list[Transmission]
 
-    def __init__(self):
+    def __init__(self, parentLogger: logging.Logger):
         """Initialize the comms sim."""
-        self._active_transmissions = set()
-        self._interrupted_transmissions = set()
+        self._logger = logging.getLogger(f"{parentLogger.name}.communication")
+        self._transmissions = []
 
-    def _check_for_reformed_links(self):
-        to_make_active = set()
-        for t in self._interrupted_transmissions:
-            if t.link.is_valid():
-                to_make_active.add(t)
-        for t in to_make_active:
-            self._active_transmissions.add(t)
-            self._interrupted_transmissions.remove(t)
-
-    def _check_links(self):
-        self._check_for_reformed_links()
-        to_go_inactive = set()
-        for t in self._active_transmissions:
-            if not t.link.is_valid():
-                to_go_inactive.add(t)
-        for t in to_go_inactive:
-            self._active_transmissions.remove(t)
-            self._interrupted_transmissions.add(t)
-
-    def update(self, timestamp: float, dt: float):
+    def update(self, simtime: mpf, dt: mpf, crafts: dict[str, Spacecraft]) -> dict[str, Spacecraft]:
         """Update one timestep."""
-        self._check_links()
-        to_remove = set()
-        for t in self._active_transmissions:
-            if t.update(dt):
-                t.receiver.receive_msg(t.msg, timestamp)
-                to_remove.add(t)
-        for t in to_remove:
-            self._active_transmissions.remove(t)
+        remaining = []
+        for t in self._transmissions:
+            if t.update(dt, crafts):
+                crafts[t.receiver].receive_msg(t.msg, simtime)
+                self._logger.debug("Message from %s to %s delivered at %s",
+                                   t.receiver, t.sender, simtime)
+            else:
+                remaining.append(t)
+        self._transmissions = remaining
+        if len(self._transmissions) > 0:
+            self._logger.debug("There are now %s active transmissions after update at %s.",
+                               len(self._transmissions), simtime)
+        return crafts
 
     def send_msg(self, msg: Message, rx, tx):
         """Start a transmission."""
-        link = CommunicationLink(rx, tx)
-        self._active_transmissions.add(Transmission(msg, link))
-
-    @property
-    def valid_links(self) -> list[CommunicationLink]:
-        """Get a deep copy list of all valid links now in the sim."""
-        self._check_links()
-        return [t.link for t in self._active_transmissions]
-
-    @property
-    def num_valid_links(self) -> int:
-        """Get the number of valid links."""
-        self._check_links()
-        return len(self._active_transmissions)
+        self._transmissions.append(Transmission(msg))
+        self._logger.debug("Queuing message send from %s to %s. "
+                           "There are now %s messages being send",
+                           rx.id, tx.id, len(self._transmissions))

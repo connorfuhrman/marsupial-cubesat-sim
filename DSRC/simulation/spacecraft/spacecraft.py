@@ -57,7 +57,7 @@ class Spacecraft:
     """How much fuel can this craft hold."""
     _fuel_level: float
     """Remaining fuel in arbitrary units."""
-    _msg_queue: Queue[Tuple[float, Message]] = Queue()
+    _msg_queue: Queue[Tuple[float, Message]]
     """Received messages since the last timestep."""
     _logger: logging.Logger
     """Logging functionality."""
@@ -85,6 +85,7 @@ class Spacecraft:
         self._logger_name = "Spacecraft"
         self._fuel_level = fuel_level
         self._fuel_capacity = fuel_level
+        self._msg_queue = Queue()
 
         def assign_arr(val, attr, dtype=float, sz: int = 3):
             val = np.array(val, dtype=dtype)
@@ -145,6 +146,7 @@ class Spacecraft:
 
     def receive_msg(self, msg: Message, timestamp: float):
         """Get a message from another craft."""
+        self._logger.debug("Received message at %s", timestamp)
         self._msg_queue.put((timestamp, msg))
 
     def get_msg(self) -> Union[Tuple[float, Message], None]:
@@ -233,6 +235,10 @@ class Spacecraft:
     def msg_queue_size(self) -> int:
         """The number of messages awaiting dispatch."""
         return self._msg_queue.qsize()
+
+    @property
+    def has_msg(self) -> bool:  # noqa D
+        return self.msg_queue_size > 0
 
     @property
     def id(self) -> str:

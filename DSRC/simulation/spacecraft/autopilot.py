@@ -21,7 +21,7 @@ class StraightLineAutopilot:
     """Waypoints to follow."""
     _tracking_waypnt: np.ndarray
     """The waypoint we're headed to."""
-    _waypoint_capture_tol: float = 0.05
+    _waypoint_capture_tol: float = 0.25
     """Distance away from a waypoint when it's considered captured [m]."""
     _heading: np.ndarray
     """The current heading command."""

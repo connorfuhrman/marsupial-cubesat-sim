@@ -11,6 +11,14 @@ Simulations are available as Ray `Actor`s which effectuate arbitrary task parall
 **Note**: This is still under active development.
 
 ## QuickStart
+
+### MATLAB Engine API for Python
+This project relies on MATLAB so it's required to install the engine API.
+Instructions on this process are found at https://www.mathworks.com/help/matlab/matlab_external/install-the-matlab-engine-for-python.html. 
+The basics is that there's a `setup.py` located at `<matlabroot>/extern/engines/python` which can be installed via `pip`.
+There are certain Python versions which work with certain MATLAB versions.
+This repo is mainly developed with Python 3.10 and MATLAB r2022b.
+
 This repository is expected to be cross-platform as it is pure Python, however development is 
 conducted mainly on MacOS and Ubuntu using Python 3.10.6.
 Around Python 3.8 should work. 

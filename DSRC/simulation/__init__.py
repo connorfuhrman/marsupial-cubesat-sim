@@ -6,3 +6,5 @@ from .simulation_history import (
     SimulationHistoryMData,
 )
 from .animation import entrypoint as animate_simulation
+
+from .simulation import Simulation, SimulationConfig, CubeSatConfig, MothershipConfig

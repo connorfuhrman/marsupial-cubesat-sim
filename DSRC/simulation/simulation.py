@@ -8,6 +8,7 @@ from DSRC.simulation import (
     SimulationHistoryMData,
 )
 from DSRC.simulation.communication import CommsSimManager, Message
+from DSRC.simulation.samples import Sample
 from dataclasses import dataclass
 import numpy as np
 import logging
@@ -16,6 +17,7 @@ from shortuuid import uuid
 from typing import TypedDict
 import itertools
 from mpmath import mpf
+from abc import ABC, abstractmethod
 
 
 class CubeSatConfig(TypedDict):
@@ -56,38 +58,44 @@ class SimulationConfig(TypedDict):
     """
     timestep: float
     """Delta in sim time."""
-    planner: callable
-    """Callable which accepts the crafts as an argument and returns them back updated."""
-    terminator: callable
-    """Callable which determins if the simulation is over."""
-    particle_ejector: callable
-    """Callable which adds particles to the simulation."""
 
 
-@dataclass(eq=False)
-class Sample:
-    """Standin as a sample class for now."""
+class _CraftMsgIterator:
+    """Private module-level class for iteration over messages.
 
-    weight: float = 10.0
-    """Sample weight in g."""
-    value: float = 5.0
-    """Value in [0, 10] rating how valuable the sample is."""
-    position: np.ndarray = None
-    """The sample's location in 3-space."""
-    velocity: np.ndarray = np.zeros(3)
-    """Samples velocity in 3-space."""
+    Allows for iterating over (craft, msg) tuple pairs as
+    this iterator will return all messages for all crafts
+    in the order of crafts then in the order of messages in
+    that craft's queue
+    """
 
-    def update_kinematics(self, dt: float, *args) -> None:
-        """Update the position of the sample."""
-        self.position += float(dt) * self.velocity
+    def __init__(self, crafts: list[Spacecraft]):
+        # print("="*50)
+        self._crafts = [c for c in filter(lambda c: c.has_msg, crafts)]
+        self._idx = 0
+        # print("ID: Num msgs")
+        # for c in self._crafts:
+        # print(f"{c.id}: {c.msg_queue_size}")
+        # print("")
 
-    def __eq__(self, o):  # noqa D
-        return (
-            self.weight == o.weight
-            and self.value == o.value
-            and np.array_equal(self.position, o.position)
-            and np.array_equal(self.velocity, o.velocity)
-        )
+    def __iter__(self):  # noqa D
+        return self
+
+    def __next__(self):  # noqa D
+        if len(self._crafts) == 0:  # There's nothing to iterate over
+            raise StopIteration
+        c = self._crafts[self._idx]
+        if not c.has_msg:  # No more msgs for this craft
+            # print(f"No more msgs for {c.id}")
+            self._idx += 1
+            if self._idx == len(self._crafts):  # No more crafts left to iter over
+                raise StopIteration
+            c = self._crafts[self._idx]
+            # print(f"{c.id} has a msg. It has {c.msg_queue_size} left")
+        msg = c.get_msg()
+        if msg is None:
+            breakpoint()
+        return (c, *msg)
 
 
 class Simulation:
@@ -97,7 +105,7 @@ class Simulation:
     multiple simulations may be run in parallel.
     """
 
-    _logger: logging.Logger
+    _simlogger: logging.Logger
     """Class logger."""
     _id: str
     """UUID of this simulation."""
@@ -111,7 +119,8 @@ class Simulation:
     deployment does not retain state information from
     the previous deployment, i.e., the mothership
     instantiates a new CubeSat object which can be
-    added to this method.
+    added to this method. If state is to be retained
+    it's up to the mothership to handle that not the sim.
     """
     _samples: list[Sample] = []
     """The known samples which can be captured."""
@@ -121,36 +130,31 @@ class Simulation:
     """List of sim timestep histories."""
     _metadata: SimulationHistoryMData
     """Metadata about this sim."""
-    _simtime: mpf = mpf(0.0)
+    _simtime: mpf
     """The sim time."""
     _simdt: mpf
     """The simulation update period."""
-    _comms_manager: CommsSimManager = CommsSimManager()
+    _comms_manager: CommsSimManager
     """Object to manage simulated communications."""
-    _planner: callable
-    """Callable which performs planning for each craft."""
-    _termiantor: callable
-    """Callable which determines if the simulation is over."""
-    _particle_ejector: callable
-    """Callable which adds particles to the simulation."""
 
-    def __init__(self, config: SimulationConfig):
+    def __init__(self, config: SimulationConfig, parentLogger: logging.Logger):
         """Initialize the simulation.
 
         Initialization occurs with a SimulationConfig dictionary.
         See that class doc string for member details.
         """
-        logging.debug("Creating simulation with config %s", config)
         self._id = uuid()
-        self._logger = logging.getLogger(f"root.simulation.{self.id}")
-        self._logger.info(f"Creating simulation {self.id}")
-        self._logger.setLevel(logging.INFO)
-        self._planner = config["planner"]
-        self._particle_ejector = config["particle_ejector"]
-        self._terminator = config["terminator"]
+        self._simlogger = logging.getLogger(f"{parentLogger.name}.simulation.{self.id}")
+        self._simlogger.debug(f"Creating simulation {self.id}")
         self._simdt = mpf(config["timestep"])
+        self._comms_manager = CommsSimManager(self._simlogger)
+        self._simtime = mpf(0.0)
 
         if len((cs_config := config["cubesat_config"])) == 1:
+            self._simlogger.debug(
+                "Got one cubesat config. Duplicating %s times",
+                len(config["mothership_config"]),
+            )
             cs_configs = [cs_config[0] for _ in config["mothership_config"]]
         else:
             if (nc := len(cs_config)) != (nm := len(config["mothership_config"])):
@@ -164,11 +168,11 @@ class Simulation:
             ms = Mothership(
                 ms_config["initial_position"],
                 ms_config["cubesat_capacity"],
-                self._logger,
+                self._simlogger,
                 ms_config["fuel_capacity"],
             )
             self._crafts[ms.id] = ms
-            self._logger.debug("Added mothership %s as %s", ms.id, ms.position)
+            self._simlogger.debug("Added mothership %s at %s", ms.id, ms.position)
             self._cubesat_configs[ms.id] = cs_config
 
         self._metadata = {
@@ -179,17 +183,27 @@ class Simulation:
             "id": self.id,
         }
 
+        self._simlogger.debug(
+            "Simulation sucesfully initialized with parameters %s", config
+        )
+
     def run(self) -> SimulationHistory:
-        """Run the simulation."""
-        self._logger.info("Simulation running")
-        while True:
+        """Run the simulation to completion.
+
+        This is the main entrypoint to the simulation which
+        starts and executes the main simulation loop. The loop
+        runs until the termination condition is met (determined
+        through the self._is_terminated() method) and, at each
+        iteration, calls the self._update() method to update
+        the simulation.
+
+        Returns the simulation's history as a SimulationHistory
+        TypedDict.
+        """
+        self._simlogger.info("Simulation loop starting")
+        while not self._is_terminated():
             self._update()
-            if self._terminator(self.simtime, self.crafts, self.samples):
-                self._logger.info("Termination condigion met!")
-                break
-            # if (i := self._metadata['total_iters']) % 1000 == 0:
-            #     self._logger.info("Iteration %s", i)
-        self._logger.info("Simulation ended at time %s", self.simtime)
+        self._simlogger.info("Simulation loop ended at time %s", self.simtime)
         return {"history": self._history, "metadata": self._metadata}
 
     def _update(self) -> None:
@@ -197,47 +211,36 @@ class Simulation:
 
         This function steps the simulation by one
         iteration and advances the sim time by dt.
-        The kinematics are updated from the previous planning
-        step and then another planning session is conducted.
 
-        Planning is done by calling the planner which
-        is a callable passed to this function
-        which takes the crafts in the simulation as
-        an argument. This function must return
-        the set of crafts back with whatever changes are
-        made to the crafts state in that return variable.
+        The update loop performs the following steps, in order:
+        (1) Updates the kinematic state for each entity in the
+            simulation. Entities are spacecraft and samples.
+        (2) Call the self._planning_step() method which should
+            perform some planning and/or coordination for
+            the spacecraft in the simulation.
+        (3) Call the self._update_samples method to possibly
+            add more samples to the simulation
+        (4) Update the simulation's metadata for later processing
+        (5) Increase the simulation time by dt
+        (6) Call the update loop for the SimCommsManager object
+            which may deliver messages which have been in transmission.
+            Any transmissions which are finalized will appear in the
+            spacecraft's message queue on the next iteration.
+        (7) Update the simulation history for later processing.
         """
-        # Update the kinematics for all things in the simulation
         for entity in self.entities_iter:
             entity.update_kinematics(self.dt)
-        # Run the planning step for all crafts
-        # This should update their kinematic state (heading/velocity/rotational velocity),
-        # perform sample capture, deploy more sample return crafts, or dock sample return crafts
-        # Additionally, this step should return a list of messages which are sent between crafts via
-        # the CommsSimManager object.
-        self._crafts, msgs, self._samples = self._planner(
-            self._crafts, self._samples, self.cubesat_configs, self._logger
-        )
-        if msgs is not None:
-            for m in msgs:
-                if type(m) is not Message:
-                    m = Message(m)
-                self._comms_manager.send_msg(
-                    m, self.crafts[m.tx_id], self.crafts[m.rx_id]
-                )
-        # Add any more samples to the simulation which were ejected
-        # by some rubble-pile asteroid
-        new_samps = self._particle_ejector(self.simtime, self.samples, self._logger)
-        if len(new_samps) > 0:
-            self._samples.extend(new_samps)
-            self._logger.debug("Added new samples: %s", [s for s in new_samps])
-            if self._metadata["max_num_samples"] < len(self._samples):
-                self._metadata["max_num_samples"] = len(self._samples)
+        self._planning_step()
+        self._update_samples()
+
+        if self._metadata["max_num_samples"] < len(self._samples):
+            self._metadata["max_num_samples"] = len(self._samples)
         self._metadata["craft_ids"] |= set(self.crafts.keys())  # Update craft IDs
         if (nc := len(self.crafts)) > self._metadata["max_num_crafts"]:
             self._metadata["max_num_crafts"] = nc  # Update max # of craft at one iter
         self._simtime += self.dt
-        self._comms_manager.update(self.simtime, self.dt)  # Update the comms simulation
+        # Update the comms simulation
+        self._crafts = self._comms_manager.update(self.simtime, self.dt, self.crafts)
         self._history.append(
             {
                 "time": self.simtime,
@@ -250,6 +253,41 @@ class Simulation:
             }
         )
         self._metadata["total_iters"] += 1
+
+    @abstractmethod
+    def _is_terminated(self) -> bool:
+        """Determine if a simulation is terminated or not.
+
+        This is an abstract method whcih must be overriden in
+        child classes.
+
+        This function is called in the main simulation loop
+        to determine if the simulation is terminated.
+
+        Return: True if terminated else False
+        """
+        pass
+
+    @abstractmethod
+    def _planning_step(self) -> None:
+        """Planning step for all craft in the simulation."""
+        pass
+
+    @abstractmethod
+    def _update_samples(self) -> None:
+        """Potentially add more known samples to the simulation."""
+        pass
+
+    def _craft_msg_iterator(self, T):
+        if T is CubeSat:
+            crafts = self.cubesats.values()
+        elif T is Mothership:
+            crafts = self.motherships.values()
+        elif T is Spacecraft:
+            crafts = self.crafts.values()
+        else:
+            raise ValueError(f"Unknown type {T}")
+        return _CraftMsgIterator(crafts)
 
     @property
     def id(self) -> str:  # noqa D
@@ -274,9 +312,29 @@ class Simulation:
         return self._get_crafts_by_type(Mothership)
 
     @property
+    def num_motherships(self) -> int:  # noqa D
+        return len(self.motherships)
+
+    @property
+    def mothership_msg_iterator(self):  # noqa D
+        return self._craft_msg_iterator(Mothership)
+
+    @property
     def cubesats(self) -> dict[str, CubeSat]:
         """Get all the crafts which are cubesats."""
         return self._get_crafts_by_type(CubeSat)
+
+    @property
+    def num_cubesats(self) -> int:  # noqa D
+        return len(self.cubesats)
+
+    @property
+    def cubesat_msg_iterator(self):  # noqa D
+        return self._craft_msg_iterator(CubeSat)
+
+    @property
+    def craft_msg_iterator(self):  # noqa D
+        return self._craft_msg_iterator(Spacecraft)
 
     @property
     def cubesat_configs(self) -> dict[str, CubeSatConfig]:  # noqa D
@@ -285,6 +343,10 @@ class Simulation:
     @property
     def samples(self) -> list[Sample]:  # noqa D
         return self._samples
+
+    @property
+    def num_samples(self) -> int:  # noqa D:
+        return len(self.samples)
 
     @property
     def simtime(self) -> float:  # noqa D
@@ -299,7 +361,7 @@ class Simulation:
         return self._metadata["total_iters"]
 
     def _get_crafts_by_type(self, T):  # noqa D
-        return {c.id: c for c in self.crafts if type(c) is T}
+        return {id: c for id, c in self.crafts.items() if type(c) is T}
 
 
 @ray.remote
@@ -394,9 +456,10 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
         "--no_animation", help="Don't do an animation just run", action="store_true"
     )
     parser.add_argument(
-        "--sim_history_save", help="JSON file to save the sim history",
+        "--sim_history_save",
+        help="JSON file to save the sim history",
         type=str,
-        default=None
+        default=None,
     )
 
     args = parser.parse_args()
@@ -556,18 +619,10 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
 
     updater = Updater()
 
-    max_to_launch = 15 # 5 * args.num_cubesats if args.num_workers == 1 else 15
-
     def ejector(time, samples, Plogger):
-        if (
-            np.random.uniform() > 0.75
-            and len(samples) < args.max_samples
-            and time < 60
-        ):
+        if np.random.uniform() > 0.75 and len(samples) < args.max_samples and time < 60:
             logger = logging.getLogger(f"{Plogger.name}.ParticleEjector")
-            nsamps = np.random.randint(
-                1, max_to_launch
-            )  # Add between 1 and 3 samples at a time
+            nsamps = np.random.randint(1, 15)
             logger.debug("Adding %s samples to the simulation at %s", nsamps, time)
             return [make_sample() for _ in range(nsamps)]
         # if time == 0.0:
@@ -581,8 +636,8 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
             weight=np.random.uniform(5, 10),
             value=np.random.uniform(1, 10),
             position=np.random.uniform(-15, 15, 3),
-            velocity=np.zeros(3))
-            #velocity=np.random.uniform(-0.05, 0.05, 3),
+            velocity=np.zeros(3),
+        )
 
     max_sim_time_min = 180
 
@@ -627,10 +682,12 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
             return SimulationActor.remote(_config)
 
         ray.init()
-        ncpus = int(ray.available_resources()['CPU'])
+        ncpus = int(ray.available_resources()["CPU"])
         if ncpus == 1:
-            raise RuntimeError("You're trying to use Ray on a single-core machine! "
-                               "Set --num_workers=1 next time")
+            raise RuntimeError(
+                "You're trying to use Ray on a single-core machine! "
+                "Set --num_workers=1 next time"
+            )
         sims_history = []
         # Manage remote workers
         actors = [make_actor() for _ in range(ncpus)]
@@ -648,7 +705,7 @@ def _test():  # noqa C901: I know the cyclomatic complexity is too large. This i
             print(f"Animating {args.num_workers} simulations")
             animate_simulation(sims_history, args.mp4_file)
         if args.sim_history_save is not None:
-            to_save = {s['metadata']['id']: s for s in sims_history}
+            to_save = {s["metadata"]["id"]: s for s in sims_history}
             save_json_file(to_save, args.sim_history_save)
     else:
         try:
