@@ -163,3 +163,8 @@ cython_debug/
 
 # Videos
 *.mp4
+
+# Images
+*.png
+*.jpg
+*.gif

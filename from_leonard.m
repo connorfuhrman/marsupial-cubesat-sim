@@ -5,8 +5,12 @@
 %
 %  L.D. Vance 17 October 2022
 %  
+
+clear all
+clc
+
 rng(1);         %  set random number seed
-nruns = 50;     %  number of trajectories to model
+nruns = 5;     %  number of trajectories to model
 dt = 5;         %  integration time step;
 tmax = 20*3600;  %  max time simulation is allowed to run
 w_bennu = (2*pi)/(4.30*3600)*[0 0 1]';  %  angular rate of bennu, Detection of 
@@ -152,3 +156,6 @@ ylabel('y (km)');
 zlabel('z (km)');
 
 
+function ret = unit(vec)
+    ret = vec ./ norm(vec);
+end
