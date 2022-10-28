@@ -168,3 +168,10 @@ cython_debug/
 *.png
 *.jpg
 *.gif
+
+
+# Generated Bennu particles
+bennu_particles/generated
+
+# Experiment Results
+experiment_results
