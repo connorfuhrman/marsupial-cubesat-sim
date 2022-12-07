@@ -7,7 +7,6 @@ values converted to floats.
 
 
 import pickle
-import numpy as np
 import csv
 import argparse
 import pathlib
@@ -18,6 +17,12 @@ ap.add_argument(
     help="Directory containing CSV files",
     type=str
 )
+ap.add_argument(
+    "--delete",
+    action='store_true',
+    help="Delete the CSV files"
+)
+    
 
 args = ap.parse_args()
 
@@ -32,6 +37,8 @@ for file in files:
         for row in reader:
             d.append([float(r) for r in row])
     data.append(d)
+    if args.delete:
+        file.unlink()
 
 
 if len(data) == 0:

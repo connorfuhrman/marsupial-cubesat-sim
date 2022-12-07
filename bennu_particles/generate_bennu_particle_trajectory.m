@@ -10,7 +10,7 @@ clear all
 clc
 
 %rng(1);         %  set random number seed
-nruns = 100;     %  number of trajectories to model
+nruns = 35;     %  number of trajectories to model
 dt = 5;         %  integration time step;
 tmax = 20*3600;  %  max time simulation is allowed to run
 w_bennu = (2*pi)/(4.30*3600)*[0 0 1]';  %  angular rate of bennu, Detection of 
@@ -120,7 +120,7 @@ end % number of simulation runs
 
 for i = 1:nruns
     j = istop(i);
-    data = [Rx_out(i, 1:j); Ry_out(i, 1:j); Rz_out(i, 1:j)]';
+    data = [linspace(0.0, j*dt, j); Rx_out(i, 1:j); Ry_out(i, 1:j); Rz_out(i, 1:j)]';
     writematrix(data, "generated/run_"+i+".csv")
 end
 
