@@ -72,6 +72,8 @@ def _get_plot_layout(nplots: int) -> tuple[int, int]:
 
 def entrypoint(sim_history: list[SimulationHistory], fname: str = None):
     """Animate the results of a simulation."""
+    if type(sim_history) is not list:
+        sim_history = [sim_history]
     fig = plt.figure(figsize=(25, 15))
     ax_map = dict()
     max_max_iters = 0

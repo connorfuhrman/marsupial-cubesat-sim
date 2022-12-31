@@ -6,3 +6,5 @@ tqdm
 shortuuid
 mpmath
 matplotlib
+pygad
+torch

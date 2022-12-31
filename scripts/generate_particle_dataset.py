@@ -22,13 +22,13 @@ ap.add_argument(
     action='store_true',
     help="Delete the CSV files"
 )
-    
+
 
 args = ap.parse_args()
 
 files = pathlib.Path(args.dir).glob("*.csv")
 
-data = []
+data = dict()
 
 for file in files:
     with open(file) as f:
@@ -36,7 +36,7 @@ for file in files:
         d = []
         for row in reader:
             d.append([float(r) for r in row])
-    data.append(d)
+    data[file.name] = d
     if args.delete:
         file.unlink()
 

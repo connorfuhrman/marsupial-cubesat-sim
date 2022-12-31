@@ -25,6 +25,7 @@ class CubeSatConfig(TypedDict):
     """Configuration for simulated cubesats."""
 
     fuel_capacity: float
+    sample_capture_prob: float
 
 
 class MothershipConfig(TypedDict):
