@@ -143,7 +143,7 @@ class Experiment(Simulation):
                 timestamp=self.simtime,
                 sample_pos=s.position,
             )
-            self._comms_manager.send_msg(msgs.Message(msg), mship, c)
+            self._comms_manager.send_msg(msgs.Message(msg))
 
     def _do_cubesat_msg_cb(self):  # noqa D
         for cs, tx_time, msg in self.cubesat_msg_iterator:

@@ -114,3 +114,9 @@ class SampleAquireCommand(MessageData):
     """Message to command a cubesat to aquire a given sample."""
 
     sample_pos: np.ndarray
+
+
+class CubeSatDocked(MessageData):
+    """Message sent from mothership that a cubesat has docked."""
+
+    id: str

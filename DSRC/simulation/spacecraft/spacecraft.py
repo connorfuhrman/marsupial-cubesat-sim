@@ -75,6 +75,7 @@ class Spacecraft:
         vel: np.ndarray = None,
         rot_vel: np.ndarray = None,
         ori: np.ndarray = None,
+        vel_mag: float = 1.0,
     ):
         """Initialize a spacecraft.
 
@@ -98,6 +99,7 @@ class Spacecraft:
         assign_arr(default() if vel is None else vel, "_velocity")
         assign_arr(default() if rot_vel is None else rot_vel, "_rotational_velocity")
         assign_arr(default() if ori is None else ori, "_orientation")
+        self.vel_mag = vel_mag  # Can be set in an experiment if need to throttle
 
         self._logger = logging.getLogger(
             f"{parentLogger.name}." f"spacecraft.{self.id}"
@@ -110,7 +112,7 @@ class Spacecraft:
             self.orientation,
         )
 
-    def update_kinematics(self, dtime, vel_mag: float = 1.0) -> bool:
+    def update_kinematics(self, dtime, vel_mag: float = None) -> bool:
         """Update the kinematic state of the craft.
 
         The autopilot member is queried for the heading
@@ -122,11 +124,17 @@ class Spacecraft:
         """
         dt = float(dtime)  # In case this is passed as mpf
         heading = self._autopilot.update(self.position)
+        if vel_mag is None:
+            vel_mag = self.vel_mag
         self._velocity = vel_mag * heading
         self._position += dt * self.velocity
         self._orientation += dt * self._rotational_velocity
-        # TODO Update fuel level based on acceleration
-        return self.fuel_level > 0.0
+        # TODO Update fuel level based on acceleration or other kinematic attribute
+        if self.fuel_level is None:  # Unlimited fuel
+            return True
+        else:
+            self._fuel_level -= np.random.uniform(low=0.0, high=0.25)
+            return self.fuel_level > 0.0
 
     def apply_rot_vel(self, rot_vel: np.ndarray) -> None:
         """Apply some rotational velocity."""
@@ -146,7 +154,6 @@ class Spacecraft:
 
     def receive_msg(self, msg: Message, timestamp: float):
         """Get a message from another craft."""
-        self._logger.debug("Received message at %s", timestamp)
         self._msg_queue.put((timestamp, msg))
 
     def get_msg(self) -> Union[Tuple[float, Message], None]:
@@ -162,8 +169,8 @@ class Spacecraft:
         """Get a state message for this spacecraft."""
         return self._get_msg(
             SpacecraftStateMsg(
-                id=self.id,
-                timesteamp=time,
+                tx_id=self.id,
+                timestamp=time,
                 position=self.position,
                 fuel_level=self.fuel_level,
                 has_sample=self.has_sample,
@@ -232,7 +239,7 @@ class Spacecraft:
         return self._autopilot.curr_waypoint
 
     @property
-    def msg_queue_size(self) -> int:
+    def msg_queue_size(self) -> int:  # noqa D401
         """The number of messages awaiting dispatch."""
         return self._msg_queue.qsize()
 
@@ -244,3 +251,7 @@ class Spacecraft:
     def id(self) -> str:
         """Retrieve a copy of this craft's ID."""
         return copy(self._id)
+
+    @property
+    def logger(self) -> logging.Logger:  # noqa D
+        return self._logger

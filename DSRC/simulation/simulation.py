@@ -234,8 +234,21 @@ class Simulation(ABC):
             spacecraft's message queue on the next iteration.
         (7) Update the simulation history for later processing.
         """
+        if (it := self._metadata['total_iters']) % 100 == 0:
+            self.logger.info("Iteraration %s. Sim time is %s", it, self.simtime)
+        to_remove = []
         for entity in self.entities_iter:
-            entity.update_kinematics(self.dt)
+            if not entity.update_kinematics(self.dt):
+                to_remove.append(entity)
+        for e in to_remove:
+            if type(e) is Sample:
+                raise NotImplementedError()
+            elif issubclass(type(e), Spacecraft):
+                self.logger.info("Craft %s has no more fuel and is removed from the simulation",
+                                 e.id)
+                del self._crafts[e.id]
+            else:
+                raise ValueError("Unknown entity type")
         self._planning_step()
         self._update_samples()
 
@@ -246,7 +259,7 @@ class Simulation(ABC):
             self._metadata["max_num_crafts"] = nc  # Update max # of craft at one iter
         self._simtime += self.dt
         # Update the comms simulation
-        self._crafts = self._comms_manager.update(self.simtime, self.dt, self.crafts)
+        self._crafts = self._comms_manager.update(self.simtime, self.dt, self._crafts)
         self._history.append(
             {
                 "time": self.simtime,

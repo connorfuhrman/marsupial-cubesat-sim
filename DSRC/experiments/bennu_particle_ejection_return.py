@@ -14,7 +14,7 @@ from DSRC.simulation import (
     SimulationConfig
 )
 
-from DSRC.simulation.spacecraft import Mothership, CubeSat
+from DSRC.simulation.spacecraft import Mothership, CubeSat, Spacecraft
 from DSRC.simulation.communication import messages as msgs
 from DSRC.simulation.samples import Sample
 
@@ -24,6 +24,8 @@ import pathlib as pl
 import pickle
 import random
 from typing import TypedDict
+from enum import Enum, auto
+from pprint import pformat
 
 
 class Config(TypedDict):
@@ -35,11 +37,24 @@ class Config(TypedDict):
     bennu_pos: np.ndarray
     """Position of Bennu in the simulation."""
 
+    transmission_freq: float
+    """Rate in Hz the craft will transmit update messages."""
+
     particle_database: pl.Path
     """Path to pickled database of particle ejections."""
 
+    action_space_rate: float
+    """Minimum update rate for actions."""
 
-class OutOfData(Exception):  # noqa D
+    action_space_dock_dist: float
+    """Minimum distance from mothership to dock."""
+
+    action_space_waypoint_dist: float
+    """Magnitude of distance for setting waypoint."""
+
+
+class OutOfData(Exception):
+    """Exception to trigger that there's no more particle ejection data."""
     pass
 
 
@@ -66,7 +81,7 @@ class ParticleDatabase:
         # samples = []
         # while len(samples != num_particles):
         #     traj = np.array(self.random())
-        pos_from_bennu = lambda: np.random.uniform(10.0, 20.0, size=(3,))
+        pos_from_bennu = lambda: np.random.uniform(-5.0, 5.0, size=(3,))
         samples = [Sample(0.0, np.random.uniform(0.0, 10.0),
                           (pos_from_bennu() - self.bennu_orig).copy(),
                           np.zeros(3))
@@ -88,6 +103,187 @@ class ParticleDatabase:
         return v
 
 
+class StatusBeacon:
+    """Transmit status at a regular interval.
+
+    This class is to assist regular transmissions of craft status.
+    """
+
+    def __init__(self, rate: float):  # noqa D
+        self.sec_btwn = 1.0/rate
+        self.last_tx_time = 0.0
+
+    def update(self, craft: CubeSat, sim_time: float):
+        """Return a status message at the appropriate rate."""
+        if (sim_time - self.last_tx_time) >= self.sec_btwn:
+            self.last_tx_time = sim_time
+            return craft.get_state_msg(sim_time)
+        return None
+
+
+class ObservationSpace:
+    """A cubesat agent's observation space."""
+
+    def __init__(self, craft_logger: logging.Logger):  # noqa D
+        self.state = dict()
+        self.logger = logging.getLogger(craft_logger.name + ".observation_space")
+
+    def update(self, m):
+        """Update the observation space.
+
+        Updates the state knowledge given any new messages
+        from the CubeSat.
+        """
+        if msgs.Message.is_type(m, msgs.SpacecraftState):
+            tx_id = m.msg['tx_id']
+            self.state[tx_id] = m.msg.copy()
+            self.logger.debug("Updating state for craft %s. "
+                              "Received state is: \n%s", tx_id, pformat(m.msg))
+        elif msgs.Message.is_type(m, msgs.CubeSatDocked):
+            if (id := m.msg['id']) in self.state:
+                self.logger.debug("Craft %s is known to be docked.", id)
+                del self.state[id]
+        else:
+            raise ValueError("Unknown message type")
+
+
+class ActionSpace:
+    """An agents action space.
+
+    The action is determined by querying the neural network model
+    for the Q value.
+    """
+
+    vals = Enum('vals', [
+        'noop',  # Do nothing
+        'dock',  # Put a waypoint at the mothership
+        'wp_u',  # Waypoint directly above
+        'wp_d',  # Waypoint directly below
+        # Waypoints to front-left
+        'wp_fl_u',  # waypoint front-left +z
+        'wp_fl_c',  # waypoint front-left
+        'wp_fl_d',  # waypoint front-left -z
+        # Waypoints to front
+        'wp_f_u',
+        'wp_f_c',
+        'wp_f_d',
+        # Waypoints to front-right
+        'wp_fr_u',
+        'wp_fr_c',
+        'wp_fr_d',
+        # Waypoints to right
+        'wp_r_u',
+        'wp_r_c',
+        'wp_r_d',
+        # Waypoints to back-right
+        'wp_br_u',
+        'wp_br_c',
+        'wp_br_d',
+        # Waypoints to back
+        'wp_b_u',
+        'wp_b_c',
+        'wp_b_d',
+        # Waypoints to back-left
+        'wp_bl_u',
+        'wp_bl_c',
+        'wp_bl_d'
+    ], start=0)
+
+    def __init__(self, rate: float, min_dock_range: float, waypoint_dist: float,
+                 craft_logger: logging.Logger):
+        """Initialize action space.
+
+        The waypoint_dist paramter determines the distance from the
+        craft a waypoint will be set.
+
+        The min_dock_range is the minimum distance between the craft
+        and the mothership for a docking waypoint to be given. This
+        action value only puts a waypoint at the mothership's location
+        and it's assumed that once within range the craft will attempt
+        to dock with the mothership.
+
+        The rate is the minimum update time. If a craft is tracking a
+        waypoint it must reach that waypoint before updating. Similarly,
+        if the craft intends to dock it must finish that action. If the
+        craft performed a noop another action will be determined only
+        after 1.0/rate seconds has passed.
+        """
+        self.cur_action = None
+        self.update_period = 1.0/rate
+        self.next_update_time = 0.0
+        self.min_dock_range = min_dock_range
+        self.logger = logging.getLogger(craft_logger.name + ".action_space")
+
+        self.above = np.array([0, 0, waypoint_dist], dtype=float)
+        self.below = -1.0 * self.above
+        self.right = np.array([0, waypoint_dist, 0], dtype=float)
+        self.left = -1.0 * self.right
+        self.forward = np.array([waypoint_dist, 0, 0], dtype=float)
+        self.behind = -1.0 * self.forward
+
+    def update(self, craft: CubeSat, mship: Mothership, sim_time: float, model, obs: ObservationSpace):
+        """Get the next action given the model and observations."""
+
+        def do_action():
+            self.cur_action = self._q_value(model, obs, craft, sim_time)
+            self._do_action(craft, mship)
+
+        if self.cur_action is None:
+            do_action()
+        elif self.cur_action == ActionSpace.vals.noop and (sim_time >= self.next_update_time):
+            self.next_update_time = sim_time + self.update_period
+            do_action()
+        elif craft.num_waypoints == 0:
+            do_action()
+
+    def _q_value(self, model, obs: ObservationSpace, craft: CubeSat, sim_time: float):
+        # TODO predict with model and not random
+        val = np.random.randint(low=0, high=len(ActionSpace.vals))
+        return ActionSpace.vals(val)
+
+    def _do_action(self, craft: CubeSat, mship: Mothership):
+        """Perform the action in the action-space."""
+        assert craft.num_waypoints == 0
+        # Noop does nothing
+        if self.cur_action == ActionSpace.vals.noop:
+            return
+        # If we can dock then set a waypoint at mothership else convert to a noop
+        if self.cur_action == ActionSpace.vals.dock:
+            if (dist := np.linalg.norm(craft.position - mship.position)) <= self.min_dock_range:
+                self.logger.info("Craft %s is %sm away from mothership and is moving to dock",
+                                 craft.id, dist)
+                craft.add_waypoint(mship.position)
+            else:
+                self.logger.debug("Craft %s wanted to dock but was %sm away.",
+                                  craft.id, dist)
+                self.cur_action = None
+            return
+        # If not a noop or a docking then it's a waypoint
+        self.logger.debug("Setting waypoint for action %s", self.cur_action.name)
+        self._do_waypoint(craft)
+
+    def _do_waypoint(self, craft: CubeSat):
+        # The most general case: set a waypoint at some offset depending on
+        # the action space's value. The offset is applied based on the naming
+        # scheme
+        waypnt = craft.position
+        assert 'wp' in self.cur_action.name
+        if 'u' in self.cur_action.name:
+            waypnt += self.above
+        if 'd' in self.cur_action.name:
+            waypnt += self.below
+        if 'f' in self.cur_action.name:
+            waypnt += self.forward
+        if 'b' in self.cur_action.name:
+            waypnt += self.behind
+        if 'r' in self.cur_action.name:
+            waypnt += self.right
+        if 'l' in self.cur_action.name:
+            waypnt += self.left
+
+        craft.add_waypoint(waypnt)
+
+
 class BennuParticleReturn(Simulation):
     """Bennu Particle Ejection Return Expriment.
 
@@ -95,12 +291,19 @@ class BennuParticleReturn(Simulation):
     the cubesats captured ejected particles from the aseroid Bennu.
     """
 
+    class CollisionEvent(Exception):
+        """Exception event to end the experiment if we get a collision."""
+
+        pass
+
     def __init__(self, config: Config, logger: logging.Logger = None):  # noqa D
         if logger is None:
             # Assume this is made within a Ray actor
-            logging.basicConfig(level=logging.ERROR)
+            logging.basicConfig(level=logging.INFO)
             logger = logging.getLogger()
         self.logger = logger
+
+        self.config = config
 
         super().__init__(config['simulation_config'], self.logger)
 
@@ -109,16 +312,30 @@ class BennuParticleReturn(Simulation):
                                               config['bennu_pos'],
                                               self.logger)
 
-
         self._initialize()
+        self.status_beacons = {c_id: StatusBeacon(self.config['transmission_freq'])
+                               for c_id in self.cubesats.keys()}
+        self.obs_spaces = {c_id: ObservationSpace(c.logger)
+                           for c_id, c in self.cubesats.items()}
+
+        def action_space(craft):
+            return ActionSpace(self.config['action_space_rate'],
+                               self.config['action_space_dock_dist'],
+                               self.config['action_space_waypoint_dist'],
+                               craft.logger)
+
+        self.action_spaces = {c_id: action_space(c)
+                              for c_id, c in self.cubesats.items()}
 
     ################################################
     # Override methods required in base simulation #
     ################################################
+
     def _planning_step(self):
+        self._update_craft_msgs()
+        self._do_craft_action()
         mothership = self.single_mothership
         for c in self.cubesats.values():
-            c.add_waypoint(mothership.position)
             if np.linalg.norm(c.position - mothership.position) <= 0.5:
                 mothership.dock_cubesat(c)
                 del self._crafts[c.id]
@@ -128,6 +345,10 @@ class BennuParticleReturn(Simulation):
 
         Simulation is terminated when there are no more cubesats.
         """
+        try:
+            self._check_collision_event()
+        except BennuParticleReturn.CollisionEvent:
+            return True  # TODO remove and handle elsewhere
         return self.num_cubesats == 0
 
     def _update_samples(self):
@@ -156,14 +377,68 @@ class BennuParticleReturn(Simulation):
                          config['sample_capture_prob'],
                          self.logger)
             cs.attempt_sample_capture(s)
-            cs.add_waypoint(self.single_mothership.position)
+            # cs.add_waypoint(self.single_mothership.position)
+            cs.vel_mag = 0.25
             self._crafts[cs.id] = cs
             self.logger.info("Cubesat %s is starting at %s "
-                              "and has %s it's sample with value %s",
-                              cs.id,
-                              cs.position,
-                              ("" if cs.has_sample else "not ") + "captured",
-                              s.value)
+                             "and has %s it's sample with value %s",
+                             cs.id,
+                             cs.position,
+                             ("" if cs.has_sample else "not ") + "captured",
+                             s.value)
+
+    def _update_craft_msgs(self):
+
+        def do_others(msg):
+            others = filter(lambda id: id != msg['tx_id']
+                            and id != self.single_mothership.id,
+                            self.cubesats.keys())
+            for o in others:
+                m = msg.copy()
+                m['rx_id'] = o
+                self._comms_manager.send_msg(msgs.Message(m))
+
+        for id, craft in self.cubesats.items():
+            if (m := self.status_beacons[id].update(craft, self.simtime)) is not None:
+                do_others(m)
+
+        for cs, tx_time, msg in self.cubesat_msg_iterator:
+            self.obs_spaces[cs.id].update(msg)
+
+    def _do_craft_action(self):
+        """Query the action space for each agent.
+
+        The action space's update function will only update the
+        agent's actions when appropritae so it's safe to call at each iteration.
+        """
+        mothership = self.single_mothership
+        for id, cs in self.cubesats.items():
+            self.action_spaces[id].update(cs, mothership, self.simtime, None, self.obs_spaces[id])
+
+    def _check_collision_event(self):
+        """Determine if a collision occured.
+
+        Collisions are only assumed to occur near the mothership.
+        A collision happens when two craft are within 5m of the
+        mothership and are within 1m of each other.
+        """
+        mothership = self.single_mothership
+        within_mship_range = [c for c in self.cubesats.values()
+                              if np.linalg.norm(c.position - mothership.position) <= 5.0]
+
+        def others(cs):
+            return filter(lambda c: c.id != cs.id,
+                          within_mship_range)
+
+        for cs in within_mship_range:
+            for o in others(cs):
+                if (d := np.linalg.norm(cs.position - o.position)) <= 0.5:
+                    self.logger.critical("Collision detected between craft %s at %s and "
+                                         "craft %s at %s. They were %sm apart",
+                                         cs.id, cs.position,
+                                         o.id, o.position,
+                                         d)
+                    raise BennuParticleReturn.CollisionEvent
 
     @property
     def single_mothership(self):
@@ -182,25 +457,28 @@ def setup():
 
     Configure and return an experiment object.
     """
-
     import sys
     import logging.config
 
     config: Config = {
-        'bennu_pos': np.array([10, 0, 0]),
+        'bennu_pos': np.array([15, 0, 0]),
         'particle_database': None,
+        'transmission_freq': 5.0,
+        'action_space_rate': 5.0,
+        'action_space_dock_dist': 10.0,
+        'action_space_waypoint_dist': 5.0,
         'simulation_config': {
             'timestep': 0.5,
             'mothership_config': [
                 {
                     'initial_position': np.array([0, 0, 0], dtype=float),
                     'cubesat_capacity': np.random.randint(3, 15),
-                    'fuel_capacity': 100,
+                    'fuel_capacity': None,  # unlimited fuel
                 },
             ],
             'cubesat_config': [
                 {
-                    'fuel_capacity': 10,
+                    'fuel_capacity': 50,
                     'sample_capture_prob': 0.85
                  },
             ]
@@ -212,7 +490,7 @@ def setup():
         "version": 1,
         "formatters": {
             "standard": {
-                "format": "%(asctime)s %(levelname)s: %(message)s",
+                "format": "%(filename)s %(levelname)s: %(message)s",
                 "datefmt": "%Y-%m-%d - %H:%M:%S",
             },
         },
@@ -234,7 +512,7 @@ def setup():
         "loggers": {
             logger_name: {
                 "level": "DEBUG",
-                "handlers": ["console", "file"],
+                "handlers": ["console"], #, "file"],
                 "propagate": False,
             },
         },

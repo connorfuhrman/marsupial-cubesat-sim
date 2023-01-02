@@ -24,6 +24,7 @@ class Sample:
     def update_kinematics(self, dt: float, *args) -> None:
         """Update the position of the sample."""
         self._position += float(dt) * self._velocity
+        return True  # Return value adhere to entity specification for simulation
 
     def __eq__(self, o):  # noqa D
         return (

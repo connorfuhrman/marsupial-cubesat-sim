@@ -53,11 +53,19 @@ class Transmission:
 
         Returns True if the transmission is done.
         """
-        # TODO determine if the transmission is active!
+        if not self.is_valid(dt, crafts):
+            return False
         # TODO define a datarate
-        datrate = mpf(10e6)
+        datrate = 10e6
         self.remaining_bytes -= datrate * dt
         return self.remaining_bytes <= 0.0
+
+    def is_valid(self, dt: float, crafts: dict[str, Spacecraft]) -> bool:
+        """Determine if the simulation is valid."""
+        if self.msg.tx_id not in crafts or self.msg.rx_id not in crafts:
+            # The sending or receiving craft isn't in the simulation
+            return False
+        return True
 
     @property
     def receiver(self) -> Spacecraft:  # noqa D
@@ -94,8 +102,8 @@ class SimulationManager:
                 crafts[t.receiver].receive_msg(t.msg, simtime)
                 self._logger.debug(
                     "Message from %s to %s delivered at %s",
-                    t.receiver,
                     t.sender,
+                    t.receiver,
                     simtime,
                 )
             else:
@@ -109,13 +117,13 @@ class SimulationManager:
             )
         return crafts
 
-    def send_msg(self, msg: Message, rx, tx):
+    def send_msg(self, msg: Message):
         """Start a transmission."""
         self._transmissions.append(Transmission(msg))
         self._logger.debug(
             "Queuing message send from %s to %s. "
             "There are now %s messages being send",
-            rx.id,
-            tx.id,
+            msg.tx_id,
+            msg.rx_id,
             len(self._transmissions),
         )
