@@ -1,6 +1,6 @@
 from .communication import SimulationManager as CommsSimManager, Transmission
 
-from .messages import Message, SpacecraftState as SpacecraftStateMsg
+from .messages import Message, CubeSatState as CubeSatStateMsg
 
 # Check that there are no conflicting messages
 #

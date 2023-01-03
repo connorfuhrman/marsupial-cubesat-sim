@@ -4,9 +4,10 @@ Cubesat class is a child of the Spacecraft class.
 """
 
 from DSRC.simulation.spacecraft import Spacecraft, StraightLineAutopilot
+from DSRC.simulation.communication.messages import Message, CubeSatState
 import numpy as np
 from scipy.stats import bernoulli
-from typing import Protocol
+from typing import Protocol, Union
 from logging import Logger
 
 
@@ -83,6 +84,21 @@ class CubeSat(Spacecraft):
             self._logger.debug("Failed to capture sample :(")
         return captured
 
+    def get_state_msg(
+        self, time: float, as_msg_obj: bool = False
+    ) -> Union[CubeSatState, Message]:
+        """Get a state message for this spacecraft."""
+        return self._get_msg(
+            CubeSatState(
+                tx_id=self.id,
+                timestamp=time,
+                position=self.position,
+                fuel_level=self.fuel_level,
+                sample_value=self.sample_value
+            ),
+            as_msg_obj,
+        )
+
     @property
     def has_sample(self) -> bool:  # noqa D
         return len(self.samples) > 0
@@ -92,9 +108,12 @@ class CubeSat(Spacecraft):
         return self._samples
 
     @property
-    def sample_weight(self) -> float:
-        """The weight of all collected samples."""
+    def sample_weight(self) -> float:  # noqa D
         return sum([s.weight for s in self.samples])
+
+    @property
+    def sample_value(self) -> float:  # noqa D
+        return sum([s.value for s in self.samples])
 
     @property
     def is_deployed(self) -> bool:  # noqa D

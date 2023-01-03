@@ -14,9 +14,10 @@ from DSRC.simulation import (
     SimulationConfig
 )
 
-from DSRC.simulation.spacecraft import Mothership, CubeSat, Spacecraft
+from DSRC.simulation.spacecraft import Mothership, CubeSat
 from DSRC.simulation.communication import messages as msgs
 from DSRC.simulation.samples import Sample
+#from DSRC.experiments.models.bennu_particle_ejection_return import Model
 
 import logging
 import numpy as np
@@ -51,6 +52,9 @@ class Config(TypedDict):
 
     action_space_waypoint_dist: float
     """Magnitude of distance for setting waypoint."""
+
+    model: "Model"
+    """Model used as Q function approximator."""
 
 
 class OutOfData(Exception):
@@ -124,8 +128,9 @@ class StatusBeacon:
 class ObservationSpace:
     """A cubesat agent's observation space."""
 
-    def __init__(self, craft_logger: logging.Logger):  # noqa D
+    def __init__(self, mship: Mothership, craft_logger: logging.Logger):  # noqa D
         self.state = dict()
+        self.mothership_pos = mship.position  # Assume stationary mothership
         self.logger = logging.getLogger(craft_logger.name + ".observation_space")
 
     def update(self, m):
@@ -134,7 +139,9 @@ class ObservationSpace:
         Updates the state knowledge given any new messages
         from the CubeSat.
         """
-        if msgs.Message.is_type(m, msgs.SpacecraftState):
+        # TODO should I be cleaning up the states for craft that we've not heard from
+        # in some period of time?
+        if msgs.Message.is_type(m, msgs.CubeSatState):
             tx_id = m.msg['tx_id']
             self.state[tx_id] = m.msg.copy()
             self.logger.debug("Updating state for craft %s. "
@@ -145,6 +152,11 @@ class ObservationSpace:
                 del self.state[id]
         else:
             raise ValueError("Unknown message type")
+
+    def observations(self, time: float):
+        """Return set of observations at the current time."""
+        return [(s['fuel_level'], s['sample_value'], time - s['timestamp'], *s['position'])
+                for s in self.state.values()]
 
 
 class ActionSpace:
@@ -236,10 +248,16 @@ class ActionSpace:
         elif craft.num_waypoints == 0:
             do_action()
 
-    def _q_value(self, model, obs: ObservationSpace, craft: CubeSat, sim_time: float):
-        # TODO predict with model and not random
-        val = np.random.randint(low=0, high=len(ActionSpace.vals))
-        return ActionSpace.vals(val)
+    def _q_value(self, model, obs_space: ObservationSpace, craft: CubeSat, sim_time: float):
+        if model is None:
+            val = np.random.randint(low=0, high=len(ActionSpace.vals))
+            return ActionSpace.vals(val)
+        my_state_msg = craft.get_state_msg(sim_time)
+        my_state = (my_state_msg['fuel_level'], my_state_msg['sample_value'],
+                    0.0, *my_state_msg['position'])
+        obs = obs_space.observations(sim_time)
+        obs.append(my_state)
+        return model.get_action(obs, obs_space.mothership_pos)
 
     def _do_action(self, craft: CubeSat, mship: Mothership):
         """Perform the action in the action-space."""
@@ -283,6 +301,11 @@ class ActionSpace:
 
         craft.add_waypoint(waypnt)
 
+    @staticmethod
+    def num_states():
+        """Return the number of possible actions."""
+        return len(ActionSpace.vals)
+
 
 class BennuParticleReturn(Simulation):
     """Bennu Particle Ejection Return Expriment.
@@ -315,7 +338,7 @@ class BennuParticleReturn(Simulation):
         self._initialize()
         self.status_beacons = {c_id: StatusBeacon(self.config['transmission_freq'])
                                for c_id in self.cubesats.keys()}
-        self.obs_spaces = {c_id: ObservationSpace(c.logger)
+        self.obs_spaces = {c_id: ObservationSpace(self.single_mothership, c.logger)
                            for c_id, c in self.cubesats.items()}
 
         def action_space(craft):
@@ -326,6 +349,15 @@ class BennuParticleReturn(Simulation):
 
         self.action_spaces = {c_id: action_space(c)
                               for c_id, c in self.cubesats.items()}
+
+        self.init_num_cubesats = self.num_cubesats
+        self.max_sample_value = sum([c.sample_value for c in self.cubesats.values()])
+        self.num_cubesats_recovered = 0
+        self.sample_value_recovered = 0.0
+
+        self.model = self.config['model']
+        if self.model is None:
+            self.logger.warning("Got no model. Will do random actions")
 
     ################################################
     # Override methods required in base simulation #
@@ -338,6 +370,8 @@ class BennuParticleReturn(Simulation):
         for c in self.cubesats.values():
             if np.linalg.norm(c.position - mothership.position) <= 0.5:
                 mothership.dock_cubesat(c)
+                self.num_cubesats_recovered += 1
+                self.sample_value_recovered += c.sample_value
                 del self._crafts[c.id]
 
     def _is_terminated(self):
@@ -413,7 +447,7 @@ class BennuParticleReturn(Simulation):
         """
         mothership = self.single_mothership
         for id, cs in self.cubesats.items():
-            self.action_spaces[id].update(cs, mothership, self.simtime, None, self.obs_spaces[id])
+            self.action_spaces[id].update(cs, mothership, self.simtime, self.model, self.obs_spaces[id])
 
     def _check_collision_event(self):
         """Determine if a collision occured.
@@ -463,10 +497,11 @@ def setup():
     config: Config = {
         'bennu_pos': np.array([15, 0, 0]),
         'particle_database': None,
-        'transmission_freq': 5.0,
+        'transmission_freq': 1.0/5.0,
         'action_space_rate': 5.0,
         'action_space_dock_dist': 10.0,
         'action_space_waypoint_dist': 5.0,
+        'model': None,
         'simulation_config': {
             'timestep': 0.5,
             'mothership_config': [
@@ -478,7 +513,7 @@ def setup():
             ],
             'cubesat_config': [
                 {
-                    'fuel_capacity': 50,
+                    'fuel_capacity': 150,
                     'sample_capture_prob': 0.85
                  },
             ]
@@ -512,7 +547,7 @@ def setup():
         "loggers": {
             logger_name: {
                 "level": "DEBUG",
-                "handlers": ["console"], #, "file"],
+                "handlers": ["console", "file"],
                 "propagate": False,
             },
         },

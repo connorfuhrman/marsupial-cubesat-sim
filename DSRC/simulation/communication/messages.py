@@ -98,16 +98,16 @@ class Message:
 #
 # Which tries to invoke a callback given a particular type.
 ####################################################################################################
-class SpacecraftState(MessageData):
-    """The state of a spacecraft.
+class CubeSatState(MessageData):
+    """The state of a cubesat.
 
-    Includes position, fuel, and if
-    a sample has been caputed.
+    Includes position, fuel, and the value
+    of the contained sample.
     """
 
     position: np.ndarray
     fuel_level: float
-    has_sample: bool
+    sample_value: float
 
 
 class SampleAquireCommand(MessageData):

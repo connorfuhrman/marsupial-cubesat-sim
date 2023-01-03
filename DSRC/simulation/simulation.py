@@ -111,7 +111,7 @@ class Simulation(ABC):
     """Class logger."""
     _id: str
     """UUID of this simulation."""
-    _crafts: dict[str, Spacecraft] = dict()
+    _crafts: dict[str, Spacecraft]
     """Crafts which exist in the simulation.
 
 
@@ -124,11 +124,11 @@ class Simulation(ABC):
     added to this method. If state is to be retained
     it's up to the mothership to handle that not the sim.
     """
-    _samples: list[Sample] = []
+    _samples: list[Sample]
     """The known samples which can be captured."""
-    _cubesat_configs: dict[str, CubeSatConfig] = dict()
+    _cubesat_configs: dict[str, CubeSatConfig]
     """Mapping between a mothership's ID and the cubesat configs."""
-    _history: list[SimulationHistoryTimestep] = []
+    _history: list[SimulationHistoryTimestep]
     """List of sim timestep histories."""
     _metadata: SimulationHistoryMData
     """Metadata about this sim."""
@@ -153,6 +153,11 @@ class Simulation(ABC):
         self._comms_manager = CommsSimManager(self._simlogger)
         self._simtime = mpf(0.0)
 
+        self._history = []
+        self._crafts = dict()
+        self._cubesat_configs = dict()
+        self._samples = []
+
         if len((cs_config := config["cubesat_config"])) == 1:
             self._simlogger.debug(
                 "Got one cubesat config. Duplicating %s times",
@@ -175,7 +180,7 @@ class Simulation(ABC):
                 ms_config["fuel_capacity"],
             )
             self._crafts[ms.id] = ms
-            self._simlogger.debug("Added mothership %s at %s", ms.id, ms.position)
+            self._simlogger.info("Added mothership %s at %s", ms.id, ms.position)
             self._cubesat_configs[ms.id] = cs_config
 
         self._metadata = {

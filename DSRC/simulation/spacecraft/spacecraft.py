@@ -7,7 +7,6 @@ from copy import copy
 from typing import Union, Protocol, Tuple
 from queue import Queue
 from DSRC.simulation.communication import CommsSimManager, Message
-from DSRC.simulation.communication import SpacecraftStateMsg
 
 
 class Autopilot(Protocol):
@@ -162,21 +161,6 @@ class Spacecraft:
             return None
         else:
             return self._msg_queue.get()
-
-    def get_state_msg(
-        self, time: float, as_msg_obj: bool = False
-    ) -> Union[SpacecraftStateMsg, Message]:
-        """Get a state message for this spacecraft."""
-        return self._get_msg(
-            SpacecraftStateMsg(
-                tx_id=self.id,
-                timestamp=time,
-                position=self.position,
-                fuel_level=self.fuel_level,
-                has_sample=self.has_sample,
-            ),
-            as_msg_obj,
-        )
 
     def _get_msg(
         self, msg: dict, as_msg_obj: bool
