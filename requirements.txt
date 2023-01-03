@@ -1,5 +1,5 @@
 ray>=2.0.0
-numpy
+numpy<=1.20
 scipy
 pandas
 tqdm
@@ -8,3 +8,4 @@ mpmath
 matplotlib
 pygad
 torch
+deepdiff

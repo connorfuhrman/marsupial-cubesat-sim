@@ -56,6 +56,9 @@ class Config(TypedDict):
     model: "Model"
     """Model used as Q function approximator."""
 
+    timeout_sec: float
+    # The number of seconds until a timeout exception is raised
+
 
 class OutOfData(Exception):
     """Exception to trigger that there's no more particle ejection data."""
@@ -352,6 +355,9 @@ class BennuParticleReturn(Simulation):
 
         self.init_num_cubesats = self.num_cubesats
         self.max_sample_value = sum([c.sample_value for c in self.cubesats.values()])
+        if self.max_sample_value == 0.0:
+            self.logger.warning("There were no captures. This is unusual!")
+            self.max_sample_value = 1  # Set to 1 to guard against div by 0. If none we captured none will be returned
         self.num_cubesats_recovered = 0
         self.sample_value_recovered = 0.0
 
@@ -379,10 +385,7 @@ class BennuParticleReturn(Simulation):
 
         Simulation is terminated when there are no more cubesats.
         """
-        try:
-            self._check_collision_event()
-        except BennuParticleReturn.CollisionEvent:
-            return True  # TODO remove and handle elsewhere
+        self._check_collision_event()
         return self.num_cubesats == 0
 
     def _update_samples(self):
@@ -467,7 +470,7 @@ class BennuParticleReturn(Simulation):
         for cs in within_mship_range:
             for o in others(cs):
                 if (d := np.linalg.norm(cs.position - o.position)) <= 0.5:
-                    self.logger.critical("Collision detected between craft %s at %s and "
+                    self.logger.error("Collision detected between craft %s at %s and "
                                          "craft %s at %s. They were %sm apart",
                                          cs.id, cs.position,
                                          o.id, o.position,
@@ -564,7 +567,8 @@ def run_debug():  # noqa D
     import pdb, traceback, sys
 
     try:
-        animate_simulation(setup().run())
+        # animate_simulation(setup().run())
+        setup().run()
     except:
         extype, value, tb = sys.exc_info()
         traceback.print_exc()
