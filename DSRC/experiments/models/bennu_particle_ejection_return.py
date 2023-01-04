@@ -91,7 +91,7 @@ class Model(torch.nn.Module):
         states_inp = [torch.Tensor(o) for o in obs]
         states_enc = [self.encoder_net(s) for s in states_inp]
 
-        states_repr = sum(states_enc)
+        states_repr = torch.nn.functional.normalize(sum(states_enc), dim=0)
         mship_pos = torch.Tensor(mothership_pos)
 
         qnet_inp = torch.cat((states_repr, mship_pos))

@@ -56,8 +56,8 @@ class Config(TypedDict):
     model: "Model"
     """Model used as Q function approximator."""
 
-    timeout_sec: float
-    # The number of seconds until a timeout exception is raised
+    num_iters_calc_reward: int
+    # Number of iterations to pass before calculating a reward
 
 
 class OutOfData(Exception):
@@ -274,11 +274,12 @@ class ActionSpace:
                 self.logger.info("Craft %s is %sm away from mothership and is moving to dock",
                                  craft.id, dist)
                 craft.add_waypoint(mship.position)
+                return
             else:
                 self.logger.debug("Craft %s wanted to dock but was %sm away.",
                                   craft.id, dist)
                 self.cur_action = None
-            return
+                raise BennuParticleReturn.InvalidDockingCmd()
         # If not a noop or a docking then it's a waypoint
         self.logger.debug("Setting waypoint for action %s", self.cur_action.name)
         self._do_waypoint(craft)
@@ -322,6 +323,11 @@ class BennuParticleReturn(Simulation):
 
         pass
 
+    class InvalidDockingCmd(Exception):
+        """Exception event when the action space commands an invalid dock."""
+
+        pass
+
     def __init__(self, config: Config, logger: logging.Logger = None):  # noqa D
         if logger is None:
             # Assume this is made within a Ray actor
@@ -356,10 +362,15 @@ class BennuParticleReturn(Simulation):
         self.init_num_cubesats = self.num_cubesats
         self.max_sample_value = sum([c.sample_value for c in self.cubesats.values()])
         if self.max_sample_value == 0.0:
-            self.logger.warning("There were no captures. This is unusual!")
+            self.logger.error("There were no captures. This is unusual!")
             self.max_sample_value = 1  # Set to 1 to guard against div by 0. If none we captured none will be returned
         self.num_cubesats_recovered = 0
         self.sample_value_recovered = 0.0
+        self.distances_to_mothership = self._calc_dists_to_mothership()
+        self.episode_reward = 0.0
+        self.num_rewards_calculated = 0
+        self.num_invalid_docking_commands = 0
+        self.total_num_actions = 0
 
         self.model = self.config['model']
         if self.model is None:
@@ -372,6 +383,8 @@ class BennuParticleReturn(Simulation):
     def _planning_step(self):
         self._update_craft_msgs()
         self._do_craft_action()
+        if self.iter % self.config['num_iters_calc_reward'] == 0:
+            self._calc_reward()
         mothership = self.single_mothership
         for c in self.cubesats.values():
             if np.linalg.norm(c.position - mothership.position) <= 0.5:
@@ -402,7 +415,7 @@ class BennuParticleReturn(Simulation):
 
     def _initialize(self):
         # Draw between 5 and 15 samples
-        n_samps = int(np.random.uniform(low=5, high=15))
+        n_samps = int(np.random.uniform(low=5, high=50))
         self.logger.info("Initializing with %s samples", n_samps)
         samples = self.particle_data.draw(n_samps, 0.0)
         config = self._cubesat_configs[self.single_mothership.id]
@@ -449,8 +462,13 @@ class BennuParticleReturn(Simulation):
         agent's actions when appropritae so it's safe to call at each iteration.
         """
         mothership = self.single_mothership
+        self.num_invalid_docking_commands = 0
         for id, cs in self.cubesats.items():
-            self.action_spaces[id].update(cs, mothership, self.simtime, self.model, self.obs_spaces[id])
+            self.total_num_actions += 1
+            try:
+                self.action_spaces[id].update(cs, mothership, self.simtime, self.model, self.obs_spaces[id])
+            except BennuParticleReturn.InvalidDockingCmd:
+                self.num_invalid_docking_commands += 1
 
     def _check_collision_event(self):
         """Determine if a collision occured.
@@ -461,7 +479,7 @@ class BennuParticleReturn(Simulation):
         """
         mothership = self.single_mothership
         within_mship_range = [c for c in self.cubesats.values()
-                              if np.linalg.norm(c.position - mothership.position) <= 5.0]
+                              if np.linalg.norm(c.position - mothership.position) <= 2.5]
 
         def others(cs):
             return filter(lambda c: c.id != cs.id,
@@ -469,14 +487,47 @@ class BennuParticleReturn(Simulation):
 
         for cs in within_mship_range:
             for o in others(cs):
-                if (d := np.linalg.norm(cs.position - o.position)) <= 0.5:
-                    self.logger.error("Collision detected between craft %s at %s and "
+                if (d := np.linalg.norm(cs.position - o.position)) <= 0.1:
+                    self.logger.info("Collision detected between craft %s at %s and "
                                          "craft %s at %s. They were %sm apart",
                                          cs.id, cs.position,
                                          o.id, o.position,
                                          d)
                     raise BennuParticleReturn.CollisionEvent
 
+    def _calc_reward(self):
+        # Calculate the reward for this step.
+        #
+        # The reward is intended to encourage agents to get closer
+        # to the mothership.
+        #
+        # Each reward calculation must be between 0 and 1
+        closer = 0
+        total = 0
+        new_dists = self._calc_dists_to_mothership()
+        for i, dist in new_dists.items():
+            if i in self.distances_to_mothership:
+                total += 1
+                if dist < self.distances_to_mothership[i]:
+                    closer += 1
+        self.distances_to_mothership = new_dists
+        if total == 0:
+            assert len(self.cubesats) == 0
+            reward = 0.0
+        else:
+            further = self.num_cubesats - closer
+            reward = (closer - further)/total
+        assert (reward <= 1.0) and (reward >= -1.0)
+        self.episode_reward += reward
+        self.num_rewards_calculated += 1
+            
+
+    def _calc_dists_to_mothership(self):
+        # Calculate all distances to the mothership and return as a dict: id -> dist
+        mothership = self.single_mothership
+        return {i: np.linalg.norm(c.position - mothership.position)
+                for i, c in self.cubesats.items()}
+        
     @property
     def single_mothership(self):
         """Return the only mothership in the simulation.
@@ -487,6 +538,13 @@ class BennuParticleReturn(Simulation):
         if self.num_motherships != 1:
             raise ValueError("There can only be one mothership")
         return list(self.motherships.values())[0]
+
+    @property
+    def final_episode_reward(self):
+        # Normalizes the episode reward by the number of iterations
+        reward = self.episode_reward/self.num_rewards_calculated
+        assert (reward >= -1.0) and (reward <= 1.0)
+        return reward
 
 
 def setup():
