@@ -47,7 +47,7 @@ def on_generation(ga_instance):  # noqa D
     print("="*45)
 
     if (ngens := ga_instance.generations_completed) % 5 == 0 or ngens == 1:
-        ga_instance.save(f"/{save_dir}/ga-generation-{ngens}")
+        ga_instance.save(f"{save_dir}/ga-generation-{ngens}")
 
         
 class Trainer:
