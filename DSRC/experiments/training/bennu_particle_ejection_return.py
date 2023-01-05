@@ -21,25 +21,10 @@ import multiprocessing as mp
 import itertools as it
 from torch.utils.tensorboard import SummaryWriter
 
+def fitness_func(sol, sol_idx):
+    global trainer
 
-# The PyGAD GA class checks that the fitness function accepts two arguments
-# but uses the __code__ method which I can't figure how to reproduce in a partial.
-# To make things more difficult the multiprocessing is pickling everything so we
-# cannot use lambdas or local closures... So we spoof PyGAD with this hackery
-# you see below. The optimizer class thinks that it gets some function object
-# that accepts two arguments since we set the __code__ object to have some field
-# co_argcount equal to 2
-class hacky:
-    def __init__(self):
-        self.co_argcount = 2
-
-class FitnessFunc:
-    def __init__(self, trainer):
-        self.f = trainer.fitness_func
-        self.__code__ = hacky()
-    def __call__(self, sol, idx):
-        return self.f(sol, idx)
-
+    return trainer.fitness_func(sol, sol_idx)
 
 def on_generation(ga_instance: pygad.GA):  # noqa D
     global save_dir
@@ -162,18 +147,27 @@ class Trainer:
         config = self.experiment_config.copy()
         config['model'] = model
 
-        if self.num_experiments_per_fitness == 1:
-            fitness = [self._run_single_experiment(config)
-                       for _ in range(self.num_experiments_per_fitness)]
-        else:
-            with mp.Pool(self.num_proc_per_fitness) as pool:
-                fitness = pool.map(self._run_single_experiment, it.repeat(config, self.num_experiments_per_fitness))
+        fitness = [self._run_single_experiment(config)
+                   for _ in range(self.num_experiments_per_fitness)]
+
+        # if self.num_opt_procs == 1:
+        #     print("Calculating!")
+        #     fitness = [self._run_single_experiment(config)
+        #                for _ in range(self.num_experiments_per_fitness)]
+        # else:
+        #     # print(f"Opening mp pool with {self.num_proc_per_fitness} procs")
+        #     with mp.Pool(self.num_opt_procs) as pool:
+        #         fitness = pool.map(self._run_single_experiment, it.repeat(config, self.num_experiments_per_fitness))
+        #     # print("Calculated fitness!")
 
         avg_fitness = sum(fitness)/self.num_experiments_per_fitness
-        assert type(avg_fitness) is float
+        if type(avg_fitness) not in pygad.GA.supported_float_types:
+            print(f"Type avg_fitness {avg_fitness} is {type(avg_fitness)}")
+            raise RuntimeError()
         return avg_fitness
 
     def _run_single_experiment(self, config):
+        # print("Starting experiment")
         experiment = BennuParticleReturn(config, self.logger)
 
         try:
@@ -201,7 +195,7 @@ class Trainer:
         global_fitness = (0.65 * p_sample_value_recovered + 0.35 * p_cubesats_recovered) * (1.0 - p_invalid_docking_cmds)
         assert_btwn(global_fitness, 0.0, 1.0)
 
-        fitness = 0.9 * global_fitness + 0.1 * experiment.final_episode_reward
+        fitness = (0.9 * global_fitness) + (0.1 * experiment.final_episode_reward)
         assert_btwn(fitness, -1.0, 1.0)
 
         return fitness
@@ -214,23 +208,21 @@ class Trainer:
             initial_population = self.initial_population
         
         num_generations = 1500  # Number of generations
-        num_parents_mating = round(num_solutions/2)  # Number of solutions to be selected as parents in the mating pool.
+        num_parents_mating = num_solutions  # Number of solutions to be selected as parents in the mating pool.
         parent_selection_type = "sss"  # Type of parent selection.
         crossover_type = "single_point"  # Type of the crossover operator.
         mutation_type = "random"  # Type of the mutation operator.
         mutation_percent_genes = 25  # Percentage of genes to mutate.
         # This parameter has no action if the parameter mutation_num_genes exists.
-        keep_parents = 2  # Number of parents to keep in the next population.
+        keep_parents = max(2, round(num_solutions/4))  # Number of parents to keep in the next population.
         # -1 means keep all parents and 0 means keep nothing.
 
         parallel = ["process", n] if (n := self.num_opt_procs) is None or n > 1 else None
 
-        fitness_func_wrapper = FitnessFunc(self)
-
         self.ga_instance = pygad.GA(num_generations=num_generations,
                                     num_parents_mating=num_parents_mating,
                                     initial_population=initial_population,
-                                    fitness_func=fitness_func_wrapper,
+                                    fitness_func=fitness_func,
                                     parent_selection_type=parent_selection_type,
                                     crossover_type=crossover_type,
                                     mutation_type=mutation_type,
