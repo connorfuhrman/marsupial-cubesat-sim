@@ -278,9 +278,9 @@ if __name__ == '__main__':
     parser.add_argument("--save_dir",
                         type=str,
                         default=None)
-    parser.add_argument("--checkpoint_fname",
-                        type=str,
-                        default=None)
+    # parser.add_argument("--checkpoint_fname",
+    #                     type=str,
+    #                     default=None)
 
     args = parser.parse_args()
 
@@ -318,7 +318,7 @@ if __name__ == '__main__':
         }
     }
 
-    num_samples = [3, 5, 10, 20, 50]
+    num_samples = [3, 5, 10, 15, 20, 50]
     initial_pop = None
     for ns in num_samples:
         experiment_config['max_num_samples'] = ns
@@ -326,12 +326,12 @@ if __name__ == '__main__':
                           num_solutions=args.num_solutions,
                           num_opt_procs=args.num_opt_procs,
                           num_experiments_per_fitness=args.num_experiments_per_fitness,
-                          num_proc_per_fitness=args.num_procs_per_fitness,
-                          checkpoint_fname=args.checkpoint_fname)
+                          num_proc_per_fitness=args.num_procs_per_fitness)
+                          # checkpoint_fname=args.checkpoint_fname)
         # Global Access #
         save_dir = pathlib.Path(args.save_dir) / f"{ns}-samples"
         summary_writer = SummaryWriter(save_dir)
-        stop_fitness = 0.75 if ns != num_samples[-1] else 0.98
+        stop_fitness = 0.9
         ##############
     
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -339,15 +339,16 @@ if __name__ == '__main__':
         print("=" * 45)
         print(f"Training starting with {ns} samples ....")
         print("=" * 45)
-        try:
-            initial_pop, last_fitness = trainer.run()
-        except KeyboardInterrupt:
-            raise
-        except:
-            import pdb, traceback, sys
-            extype, value, tb = sys.exc_info()
-            traceback.print_exc()
-            pdb.post_mortem(tb)
+        # try:
+        #     initial_pop, last_fitness = trainer.run()
+        # except KeyboardInterrupt:
+        #     raise
+        # except:
+        #     import pdb, traceback, sys
+        #     extype, value, tb = sys.exc_info()
+        #     traceback.print_exc()
+        #     pdb.post_mortem(tb)
+        initial_pop, last_fitness = trainer.run()
         print(f"Training with {ns} samples finished with fitness {last_fitness}")
         print("=" * 45)
 
