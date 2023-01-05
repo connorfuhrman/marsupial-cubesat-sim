@@ -61,6 +61,9 @@ class SimulationConfig(TypedDict):
     timestep: float
     """Delta in sim time."""
 
+    save_history: bool
+    # Save the simulation history or not
+
 
 class _CraftMsgIterator:
     """Private module-level class for iteration over messages.
@@ -153,7 +156,7 @@ class Simulation(ABC):
         self._comms_manager = CommsSimManager(self._simlogger)
         self._simtime = mpf(0.0)
 
-        self._history = []
+        self._history = [] if config["save_history"] else None
         self._crafts = dict()
         self._cubesat_configs = dict()
         self._samples = []
@@ -265,17 +268,18 @@ class Simulation(ABC):
         self._simtime += self.dt
         # Update the comms simulation
         self._crafts = self._comms_manager.update(self.simtime, self.dt, self._crafts)
-        self._history.append(
-            {
-                "time": self.simtime,
-                "craft_positions": {c.id: c.position for c in self.crafts.values()},
-                "craft_types": {
-                    c.id: "CubeSat" if type(c) is CubeSat else "Mothership"
-                    for c in self.crafts.values()
-                },
-                "sample_positions": [s.position.copy() for s in self.samples],
-            }
-        )
+        if self._history is not None:
+            self._history.append(
+                {
+                    "time": self.simtime,
+                    "craft_positions": {c.id: c.position for c in self.crafts.values()},
+                    "craft_types": {
+                        c.id: "CubeSat" if type(c) is CubeSat else "Mothership"
+                        for c in self.crafts.values()
+                    },
+                    "sample_positions": [s.position.copy() for s in self.samples],
+                }
+            )
         self._metadata["total_iters"] += 1
 
     @abstractmethod

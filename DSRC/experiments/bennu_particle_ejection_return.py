@@ -59,6 +59,12 @@ class Config(TypedDict):
     num_iters_calc_reward: int
     # Number of iterations to pass before calculating a reward
 
+    min_num_samples: int
+    # The minimum number of samples (and therefore cubesats)
+
+    max_num_samples: int
+    # The maximum number of samples (and therefore cubesats)
+
 
 class OutOfData(Exception):
     """Exception to trigger that there's no more particle ejection data."""
@@ -414,8 +420,14 @@ class BennuParticleReturn(Simulation):
     ################################################
 
     def _initialize(self):
-        # Draw between 5 and 15 samples
-        n_samps = int(np.random.uniform(low=5, high=50))
+        #n_samps = int(np.random.uniform(low=3, high=10))
+        low = self.config['min_num_samples']
+        high = self.config['max_num_samples']
+        if low != high:
+            n_samps = np.random.randint(low=low, high=high)
+        else:
+            n_samps = low
+                                    
         self.logger.info("Initializing with %s samples", n_samps)
         samples = self.particle_data.draw(n_samps, 0.0)
         config = self._cubesat_configs[self.single_mothership.id]
@@ -556,15 +568,19 @@ def setup():
     import logging.config
 
     config: Config = {
-        'bennu_pos': np.array([15, 0, 0]),
+        'bennu_pos': np.array([50, 0, 0]),
         'particle_database': None,
-        'transmission_freq': 1.0/5.0,
-        'action_space_rate': 5.0,
+        'transmission_freq': 1.0/2.0,
+        'action_space_rate': 1.0,
         'action_space_dock_dist': 10.0,
-        'action_space_waypoint_dist': 5.0,
+        'action_space_waypoint_dist': 2.5,
         'model': None,
+        'num_iters_calc_reward': 10,
+        'min_num_samples': 3,
+        'max_num_samples': 15,
         'simulation_config': {
             'timestep': 0.5,
+            'save_history': True,
             'mothership_config': [
                 {
                     'initial_position': np.array([0, 0, 0], dtype=float),
@@ -574,7 +590,7 @@ def setup():
             ],
             'cubesat_config': [
                 {
-                    'fuel_capacity': 150,
+                    'fuel_capacity': 170,
                     'sample_capture_prob': 0.85
                  },
             ]

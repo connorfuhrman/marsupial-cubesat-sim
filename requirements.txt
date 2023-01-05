@@ -9,3 +9,4 @@ matplotlib
 pygad
 torch
 deepdiff
+tensorboard
