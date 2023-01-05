@@ -16,6 +16,7 @@ import sys
 import logging
 import logging.config
 import torch
+import os
 
 
 # The PyGAD GA class checks that the fitness function accepts two arguments
@@ -41,13 +42,19 @@ def on_generation(ga_instance):  # noqa D
     global save_dir
     
     # assert ga_instance.generations_completed == len(ga_instance.best_solutions_fitness)
+    max_overall = max(ga_instance.best_solutions_fitness)
     print(f"Generation             = {ga_instance.generations_completed}")
     print(f"Generation Max Fitness = {ga_instance.best_solutions_fitness[-1]}")
-    print(f"Overall Max Fitness    = {max(ga_instance.best_solutions_fitness)}")
+    print(f"Overall Max Fitness    = {max_overall}")
     print("="*45)
 
     if (ngens := ga_instance.generations_completed) % 5 == 0 or ngens == 1:
         ga_instance.save(f"{save_dir}/ga-generation-{ngens}")
+
+    stop_at_fit = 0.99
+    if max_overall > stop_at_fit:
+        print(f"Signaling to stop since fitness reached {stop_at_fit} at generation {ga_instance.generations_completed}")
+        return "stop"
 
         
 class Trainer:
@@ -70,6 +77,10 @@ class Trainer:
         A model's fitness is calculated using
         num_experiments_per_fitness experiments averaged.
         """
+        print(f"Training with population size of {num_solutions}")
+        print(f"Fitness is averaged out of {num_experiments_per_fitness} runs")
+        print(f"Number of available processor cores is {os.cpu_count()}\n")
+        
         self.num_experiments_per_fitness = num_experiments_per_fitness
 
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -192,7 +203,7 @@ class Trainer:
     def _new_ga_instance(self, num_solutions):
         model_ga = torchga.TorchGA(Model(), num_solutions)
         
-        num_generations = 1500  # Number of generations
+        num_generations = 500  # Number of generations
         num_parents_mating = 2  # Number of solutions to be selected as parents in the mating pool.
         initial_population = model_ga.population_weights  # Initial population of network weights
         parent_selection_type = "sss"  # Type of parent selection.
@@ -222,20 +233,21 @@ class Trainer:
 
         This just dispatches to the GA instance's run method.
         """
+        global save_dir
+
         self.ga_instance.run()
-        self.ga_instance.save("/tmp/ga_results-final")
+        self.ga_instance.save(f"{save_dir}/ga_results-final")
         #self.ga_instance.plot_result(title="Bennu Sample Return Fitness", linewidth=4)
 
         model = Model()
         sol, _, _ = self.ga_instance.best_solution()
         weight_dict = torchga.model_weights_as_dict(model, sol)
         model.load_state_dict(weight_dict)
-        model.save("/tmp/bennu_particle_return_model_weights")
+        torch.save(model.state_dict(), f"/{save_dir}/bennu_particle_return_model_weights.pytorch_model")
 
 
 if __name__ == '__main__':
     import argparse
-    import os
     import pathlib
 
     parser = argparse.ArgumentParser()

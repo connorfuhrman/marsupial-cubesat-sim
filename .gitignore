@@ -175,3 +175,6 @@ bennu_particles/generated
 
 # Experiment Results
 experiment_results
+
+# Singulatiry Files
+*.sif
