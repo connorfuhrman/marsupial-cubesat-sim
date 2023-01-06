@@ -274,7 +274,6 @@ class Trainer:
         sol, fitness, _ = self.ga_instance.best_solution()
         weight_dict = torchga.model_weights_as_dict(model, sol)
         model.load_state_dict(weight_dict)
-        # torch.save(model.state_dict(), f"/{save_dir}/bennu_particle_return_model_weights.pytorch_model")
         return model, fitness
 
 
@@ -359,7 +358,7 @@ if __name__ == '__main__':
         save_dir = pathlib.Path(args.save_dir) / f"{ns}-samples"
         summary_writer = SummaryWriter(save_dir)
         max_fitness = None
-        stop_fitness = -0.85 #0.9
+        stop_fitness = 0.75 if ns != num_samples[-1] else 0.9
         ################
     
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -374,13 +373,9 @@ if __name__ == '__main__':
         #     traceback.print_exc()
         #     pdb.post_mortem(tb)
         starting_model, last_fitness = trainer.run()
+        torch.save(starting_model.state_dict(), save_dir/"trained.pytorch_model")
         print(f"Training with {ns} samples finished with fitness {last_fitness}")
         print("=" * 45)
-
-    m = Model()
-    weight_dict = torchga.model_weights_as_dict(model, initial_pop)
-    model.load_state_dict(weight_dict)
-    torch.save(model.state_dict(), f"/{args.save_dir}/bennu_particle_return_model_weights.pytorch_model")
     
     # try:
     #     trainer.run()
