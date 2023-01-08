@@ -219,7 +219,7 @@ class Trainer:
         assert_btwn(p_invalid_docking_cmds, 0.0, 1.0)
 
         if p_sample_value_recovered == 0.0 and p_cubesats_recovered == 0.0:
-            global_fitness = -2.0
+            global_fitness = -0.5
         else:
             global_fitness = (0.65 * p_sample_value_recovered + 0.35 * p_cubesats_recovered) * (1.0 - p_invalid_docking_cmds)
             assert_btwn(global_fitness, 0.0, 1.0)

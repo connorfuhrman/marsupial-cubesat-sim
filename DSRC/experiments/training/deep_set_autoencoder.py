@@ -55,27 +55,36 @@ def generate_single_input(_):
     return ob
 
 def generate_batch(batch_size, pool):
-    return pool.map(generate_single_input, range(batch_size))
+    return torch.Tensor(pool.map(generate_single_input, range(batch_size))).cuda()
 
 class Dataset:
     def __init__(self, pool, num_epochs, batch_size, data_size):
-        self.num_epocs = num_epochs
-        self.data_size = data_size
+        self.num_epochs = num_epochs
+        self.epochs_run = 0
+        self.data_size = int(data_size)
         self.make_data = partial(generate_batch, batch_size, pool)
-        self.idx = 0
-        self.data = self.generate()
+        self.idx = self.data_size
+        self.data = None
 
     def generate(self):
         self.idx = 0
-        return [torch.cuda.FloatTensor(self.make_data()) for _ in range(self.data_size)]
+        torch.cuda.empty_cache()
+        self.data = [self.make_data() for _ in range(self.data_size)]
+
+    def __len__(self):
+        return self.num_epocs
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        if self.epochs_run == self.num_epochs:
+            raise StopIteration()
         if self.idx == self.data_size:
             self.generate()
-        return self.data[self.idx]
+        self.idx += 1
+        self.num_epochs += 1
+        return self.data[self.idx-1]
         
     
 
@@ -88,13 +97,13 @@ if __name__ == '__main__':
         lr=1e-3,
         weight_decay=1e-5)
 
-    num_epochs = int(7e6)
-    batch_size = 526
+    num_epochs = 7e6
+    batch_size = 256
 
     model.train()
 
     with mp.Pool() as pool:
-        for epoch, data in enumerate(Dataset(pool, num_epochs, batch_size, data_size=pow(2, 15))):
+        for epoch, data in (pbar := tqdm(enumerate(Dataset(pool, num_epochs, batch_size, data_size=1e6)), total=num_epochs)):
             output = model(data)
             loss = criterion(output, data)
 
@@ -102,7 +111,7 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
 
-            if epoch % 5000 == 0:
-                print(f"Epoch: {epoch+1}/{num_epochs}, loss: {loss:10.3}")
+                            
+            pbar.set_description(f"Epoch: {epoch+1}/{num_epochs}, loss: {loss:10.3}")
 
     torch.save(model.state_dict(), "./model.pth")

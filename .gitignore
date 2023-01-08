@@ -177,7 +177,7 @@ bennu_particles/generated
 experiment_results
 train_output
 
-# Singulatiry Files
+# Sinqgulatiry Files
 *.sif
 
 # pytorch models
