@@ -8,10 +8,6 @@ from DSRC.experiments.bennu_particle_ejection_return import ActionSpace
 
 import torch
 
-# Since we intend to use genetic optimization there is no need
-# to perform gradient calculations
-torch.set_grad_enabled(False)
-
 
 class EncoderNetwork(torch.nn.Module):
     """Encoder network.

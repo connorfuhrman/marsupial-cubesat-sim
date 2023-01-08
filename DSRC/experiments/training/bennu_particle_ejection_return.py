@@ -5,6 +5,8 @@ optimization process. The model is used as a Deep Q Network for the reinforcemen
 learning task of determining docking order.
 """
 
+import torch
+torch.set_grad_enabled(False)
 
 from DSRC.experiments import BennuParticleReturn
 from DSRC.experiments.models.bennu_particle_ejection_return import Model

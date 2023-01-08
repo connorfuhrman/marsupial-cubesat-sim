@@ -180,3 +180,5 @@ train_output
 # Singulatiry Files
 *.sif
 
+# pytorch models
+*.pth
