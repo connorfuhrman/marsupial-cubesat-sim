@@ -5,6 +5,7 @@ from torch.autograd import Variable
 import numpy as np
 from tqdm import tqdm
 import multiprocessing as mp
+from functools import partial
 
 
 class DecoderNetwork(torch.nn.Module):
@@ -53,9 +54,29 @@ def generate_single_input(_):
     #return torch.Tensor(ob, device=torch.device('cuda'))
     return ob
 
-
 def generate_batch(batch_size, pool):
     return pool.map(generate_single_input, range(batch_size))
+
+class Dataset:
+    def __init__(self, pool, num_epochs, batch_size, data_size):
+        self.num_epocs = num_epochs
+        self.data_size = data_size
+        self.make_data = partial(generate_batch, batch_size, pool)
+        self.idx = 0
+        self.data = self.generate()
+
+    def generate(self):
+        self.idx = 0
+        return [torch.cuda.FloatTensor(self.make_data()) for _ in range(self.data_size)]
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.idx == self.data_size:
+            self.generate()
+        return self.data[self.idx]
+        
     
 
 
@@ -73,9 +94,7 @@ if __name__ == '__main__':
     model.train()
 
     with mp.Pool() as pool:
-        for epoch in (pbar := tqdm(range(num_epochs))):
-            obs = generate_batch(batch_size, pool)
-            data = torch.cuda.FloatTensor(obs)
+        for epoch, data in enumerate(Dataset(pool, num_epochs, batch_size, data_size=pow(2, 15))):
             output = model(data)
             loss = criterion(output, data)
 
@@ -83,6 +102,7 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
 
-            pbar.set_description(f"Epoch: {epoch+1}/{num_epochs}, loss: {loss:10.3}")
+            if epoch % 5000 == 0:
+                print(f"Epoch: {epoch+1}/{num_epochs}, loss: {loss:10.3}")
 
     torch.save(model.state_dict(), "./model.pth")
