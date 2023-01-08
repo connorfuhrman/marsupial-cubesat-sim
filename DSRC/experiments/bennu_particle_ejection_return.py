@@ -528,7 +528,7 @@ class BennuParticleReturn(Simulation):
             reward = 0.0
         else:
             further = self.num_cubesats - closer
-            reward = (closer - further)/total
+            reward = (0.7 * closer - 0.3 * further)/total
         assert (reward <= 1.0) and (reward >= -1.0)
         self.episode_reward += reward
         self.num_rewards_calculated += 1
