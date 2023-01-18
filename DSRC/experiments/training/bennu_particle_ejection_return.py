@@ -10,6 +10,7 @@ torch.set_grad_enabled(False)
 
 from DSRC.experiments import BennuParticleReturn
 from DSRC.experiments.models.bennu_particle_ejection_return import Model
+from DSRC.simulation.utils import save_json_file
 
 import pygad
 from pygad import torchga
@@ -23,6 +24,8 @@ import multiprocessing as mp
 import itertools as it
 from torch.utils.tensorboard import SummaryWriter
 import pathlib
+
+global trainer
 
 def fitness_func(sol, sol_idx):
     global trainer
@@ -57,7 +60,7 @@ def on_generation(ga_instance: pygad.GA):  # noqa D
     trainer.summary_writer.add_scalar("Fitness/Generation Max", max_last_gen_fitness, N)
     trainer.summary_writer.add_scalar("Fitness/Generation Min", min_last_gen_fitness, N)
     trainer.summary_writer.add_scalar("Fitness/Generation Avg", avg_last_gen_fitness, N)
-    trainer.summary_writer.add_histogram("Fitness/Generation", ga_instance.last_generation_fitness, ga_instance.generations_completed)
+    trainer.summary_writer.add_histogram("Fitness/Generation", ga_instance.last_generation_fitness, N)
 
 
     with open(f"{trainer.save_dir}/fitness-values.csv", "a") as f:
@@ -69,8 +72,8 @@ def on_generation(ga_instance: pygad.GA):  # noqa D
 
     print("="*45)
 
-    if trainer.max_fitness > trainer.stop_fitness:
-        print(f"Signaling to stop since fitness reached {trainer.stop_fitness} at generation {N}")
+    if trainer.max_fitness > trainer.stop_fitness and avg_last_gen_fitness > 0.35:
+        print(f"Signaling to stop since max fitness reached {trainer.stop_fitness} and avg fitness reached 0.35 at generation {N}")
         return "stop"
 
         
@@ -196,8 +199,9 @@ class Trainer:
     def _run_single_experiment(self, config):
         experiment = BennuParticleReturn(config, self.logger)
 
+        history = None
         try:
-            experiment.run()
+            history = experiment.run()
         except BennuParticleReturn.CollisionEvent:
             # In the event that a crash occured the fitness is set low
             return -2.0
@@ -227,6 +231,17 @@ class Trainer:
         fitness = (0.85 * global_fitness) + (0.15 * experiment.final_episode_reward)
         assert_btwn(fitness, -2.0, 1.0)
 
+        # Save the history for debugging purposes
+        if history is not None:
+            save_path = self.save_dir/"experiment_histories"
+            save_path.mkdir(exist_ok=True)
+            fit_str = ""
+            if fitness < 0.0:
+                fit_str += "n"
+            fit_str += str(abs(fitness))
+            save_file = save_path/f"expr-{experiment.id}_fitness-{fit_str}_history.json"
+            save_json_file(history, save_file)
+
         return fitness
 
     def _new_ga_instance(self, num_solutions):
@@ -234,9 +249,9 @@ class Trainer:
             initial_population = torchga.TorchGA(Model(), num_solutions).population_weights
         else:
             initial_population = torchga.TorchGA(self.initial_model, num_solutions).population_weights
-        
+
         num_generations = 1500  # Number of generations
-        num_parents_mating = num_solutions  # Number of solutions to be selected as parents in the mating pool.
+        num_parents_mating = round(num_solutions/2)  # Number of solutions to be selected as parents in the mating pool.
         parent_selection_type = "sss"  # Type of parent selection.
         crossover_type = "single_point"  # Type of the crossover operator.
         mutation_type = "random"  # Type of the mutation operator.
@@ -255,7 +270,7 @@ class Trainer:
                                     on_generation=on_generation,
                                     parallel_processing=parallel,
                                     allow_duplicate_genes=False,
-                                    keep_elitism=round(num_solutions/4))
+                                    keep_elitism=1)
 
     def update_scenario(self):
         dist_from_bennu = 50
@@ -286,7 +301,7 @@ class Trainer:
         This just dispatches to the GA instance's run method.
         """
 
-        self.update_scenario()
+        # self.update_scenario()
 
         self.ga_instance.run()
         self.ga_instance.save(f"{self.save_dir}/ga_results-final")
@@ -332,16 +347,16 @@ if __name__ == '__main__':
     experiment_config = {
         'bennu_pos': np.array([50, 0, 0]),
         'particle_database': None,
-        'transmission_freq': 1.0/2.0,
+        'transmission_freq': 2.0,
         'action_space_rate': 1.0,
-        'action_space_dock_dist': 10.0,
+        'action_space_dock_dist': 25.0,
         'action_space_waypoint_dist': 2.5,
-        'num_iters_calc_reward': 60,
+        'num_iters_calc_reward': 4,
         'min_num_samples': 2,
         'max_num_samples': 5,
         'simulation_config': {
-            'timestep': 0.5,
-            'save_history': False,
+            'timestep': 0.25,
+            'save_history': True,
             'mothership_config': [
                 {
                     'initial_position': np.array([0, 0, 0], dtype=float),
@@ -359,7 +374,7 @@ if __name__ == '__main__':
     }
 
     def train_until_fit(config, req_fitness, save_dir):
-        global trainer 
+        global trainer
         model = None
         while True:
             trainer = Trainer(config=config,

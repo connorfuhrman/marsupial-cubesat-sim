@@ -351,6 +351,7 @@ class BennuParticleReturn(Simulation):
                                               self.logger)
 
         self._initialize()
+        self.initial_cubesat_ids = list(self.cubesats.keys())
         self.status_beacons = {c_id: StatusBeacon(self.config['transmission_freq'])
                                for c_id in self.cubesats.keys()}
         self.obs_spaces = {c_id: ObservationSpace(self.single_mothership, c.logger)
@@ -393,6 +394,7 @@ class BennuParticleReturn(Simulation):
             self._calc_reward()
         mothership = self.single_mothership
         for c in self.cubesats.values():
+            assert c.id in self.initial_cubesat_ids
             if np.linalg.norm(c.position - mothership.position) <= 0.5:
                 mothership.dock_cubesat(c)
                 self.num_cubesats_recovered += 1
