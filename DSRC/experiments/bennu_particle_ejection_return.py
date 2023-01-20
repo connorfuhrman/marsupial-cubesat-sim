@@ -501,7 +501,7 @@ class BennuParticleReturn(Simulation):
 
         for cs in within_mship_range:
             for o in others(cs):
-                if (d := np.linalg.norm(cs.position - o.position)) <= 0.1:
+                if (d := np.linalg.norm(cs.position - o.position)) <= 0.5:
                     self.logger.info("Collision detected between craft %s at %s and "
                                          "craft %s at %s. They were %sm apart",
                                          cs.id, cs.position,

@@ -49,12 +49,6 @@ def on_generation(ga_instance: pygad.GA):  # noqa D
     print(f"Generation Avg Fitness = {avg_last_gen_fitness}")
     print(f"Overall Max Fitness    = {trainer.max_fitness}")
 
-    if avg_last_gen_fitness > 0.35 and \
-       max_last_gen_fitness > (0.65 * trainer.stop_fitness) and \
-       trainer.should_update_scenario():
-        print("Randomly generating a new scenario")
-        trainer.update_scenario()
-
     trainer.summary_writer.add_scalar("Generation", N, N)
     trainer.summary_writer.add_scalar("Fitness/Max Overall", trainer.max_fitness, N)
     trainer.summary_writer.add_scalar("Fitness/Generation Max", max_last_gen_fitness, N)
@@ -72,8 +66,11 @@ def on_generation(ga_instance: pygad.GA):  # noqa D
 
     print("="*45)
 
-    if trainer.max_fitness > trainer.stop_fitness and avg_last_gen_fitness > 0.35:
-        print(f"Signaling to stop since max fitness reached {trainer.stop_fitness} and avg fitness reached 0.35 at generation {N}")
+    # req_avg_fitness = 0.55
+    # and avg fitness reached {req_avg_fitness}
+    # and avg_last_gen_fitness > req_avg_fitness:
+    if trainer.max_fitness > trainer.stop_fitness:
+        print(f"Signaling to stop since max fitness reached {trainer.stop_fitness} at generation {N}")
         return "stop"
 
         
@@ -116,7 +113,6 @@ class Trainer:
         self.summary_writer = SummaryWriter(self.save_dir)
         self.stop_fitness = stop_fitness
         self.max_fitness = None
-        self.num_gens_since_update = 0
 
         print(f"Training with population size of {num_solutions}")
         if self.initial_model is not None:
@@ -231,7 +227,7 @@ class Trainer:
         fitness = (0.85 * global_fitness) + (0.15 * experiment.final_episode_reward)
         assert_btwn(fitness, -2.0, 1.0)
 
-        # Save the history for debugging purposes
+        # Save the history for debugging purposes if needed
         if history is not None:
             save_path = self.save_dir/"experiment_histories"
             save_path.mkdir(exist_ok=True)
@@ -246,8 +242,10 @@ class Trainer:
 
     def _new_ga_instance(self, num_solutions):
         if self.initial_model is None:
+            print("Got no initial model. Generating random solutions")
             initial_population = torchga.TorchGA(Model(), num_solutions).population_weights
         else:
+            print("Got an initial model as a starting point")
             initial_population = torchga.TorchGA(self.initial_model, num_solutions).population_weights
 
         num_generations = 1500  # Number of generations
@@ -272,36 +270,11 @@ class Trainer:
                                     allow_duplicate_genes=False,
                                     keep_elitism=1)
 
-    def update_scenario(self):
-        dist_from_bennu = 50
-        # Chose a random location for the mothership
-        mship_pos = np.random.default_rng().uniform(low=-500, high=500, size=(3,))
-        # Chose a random Bennu position some distance away
-        theta = np.random.default_rng().uniform(low=0, high=2.0*np.pi)
-        phi = np.random.default_rng().uniform(low=0, high=np.pi)
-        bennu_pos = np.array([dist_from_bennu * np.cos(theta) * np.sin(phi),
-                              dist_from_bennu * np.sin(theta) * np.sin(phi),
-                              dist_from_bennu * np.cos(phi)], dtype=float) + mship_pos
-
-        assert np.abs(np.linalg.norm(bennu_pos - mship_pos) - dist_from_bennu) <= 0.5  # Sanity check the distance from the mothership
-        
-        self.experiment_config['bennu_pos'] = bennu_pos
-        self.experiment_config['simulation_config']['mothership_config'][0]['initial_position'] = mship_pos
-
-        print(f"New mothership position is {mship_pos} and new Bennu position is {bennu_pos}")
-        self.num_gens_since_update = 0
-
-    def should_update_scenario(self):
-        self.num_gens_since_update += 1
-        return self.num_gens_since_update >= 10
-
     def run(self):
         """Run the training session.
 
         This just dispatches to the GA instance's run method.
         """
-
-        # self.update_scenario()
 
         self.ga_instance.run()
         self.ga_instance.save(f"{self.save_dir}/ga_results-final")
@@ -312,6 +285,28 @@ class Trainer:
         weight_dict = torchga.model_weights_as_dict(model, sol)
         model.load_state_dict(weight_dict)
         return model, fitness
+
+
+def update_scenario(experiment_config):
+    dist_from_bennu = 50
+    # Chose a random location for the mothership
+    mship_pos = np.random.default_rng().uniform(low=-500, high=500, size=(3,))
+    # Chose a random Bennu position some distance away
+    theta = np.random.default_rng().uniform(low=0, high=2.0*np.pi)
+    phi = np.random.default_rng().uniform(low=0, high=np.pi)
+    bennu_pos = np.array([dist_from_bennu * np.cos(theta) * np.sin(phi),
+                          dist_from_bennu * np.sin(theta) * np.sin(phi),
+                          dist_from_bennu * np.cos(phi)], dtype=float) + mship_pos
+
+    # Sanity check the distance from the mothership
+    assert np.abs(np.linalg.norm(bennu_pos - mship_pos) - dist_from_bennu) <= 0.5  
+
+    experiment_config['bennu_pos'] = bennu_pos
+    experiment_config['simulation_config']['mothership_config'][0]['initial_position'] = mship_pos
+
+    print(f"New mothership position is {mship_pos} and new Bennu position is {bennu_pos}")
+
+    return experiment_config
 
 
 if __name__ == '__main__':
@@ -336,12 +331,22 @@ if __name__ == '__main__':
     # parser.add_argument("--checkpoint_fname",
     #                     type=str,
     #                     default=None)
+    parser.add_argument("--model_weights",
+                        type=str,
+                        default=None,
+                        help="Path to existing model weights to seed optimization")
 
     args = parser.parse_args()
 
     if args.save_dir is None:
         from datetime import datetime
         args.save_dir = datetime.now().strftime("%B-%d-%H:%M:%S")
+
+    if args.model_weights is not None:
+        model = Model()
+        model.load_state_dict(torch.load(args.model_weights))
+    else:
+        model = None
     
     #trainer = Trainer(num_solutions=8, num_experiments_per_fitness=1, checkpoint_fname="/tmp/ga-generation-65")
     experiment_config = {
@@ -373,13 +378,15 @@ if __name__ == '__main__':
         }
     }
 
-    def train_until_fit(config, req_fitness, save_dir):
+    def train_until_fit(config, req_fitness, save_dir, model=None):
         global trainer
-        model = None
+
+        config = update_scenario(config)  # Pick a random mothership and Bennu position
+        num_config_updates = 0
         while True:
             trainer = Trainer(config=config,
                               initial_model=model,
-                              save_dir=save_dir,
+                              save_dir=save_dir/f"config-{num_config_updates}",
                               stop_fitness=req_fitness,
                               num_solutions=args.num_solutions,
                               num_opt_procs=args.num_opt_procs,
@@ -387,11 +394,16 @@ if __name__ == '__main__':
                               num_proc_per_fitness=1)
             model, fitness = trainer.run()
             if fitness >= 0.95 * req_fitness:
-                break
+                # Train until there are N succesful updates to the scenario 
+                if num_config_updates == 5:
+                    break
+                # Update the scenario to have a new mothership and bennu position
+                config = update_scenario(config)
+                num_config_updates += 1
             else:
                 print(f"Re-training since early-stop only resulted in fitness of {fitness} > {0.95 * req_fitness}")
         return model, fitness
-            
+
     num_samples = [10, 15, 20, 50]
     for ns in num_samples:
         print("=" * 45)
@@ -400,9 +412,9 @@ if __name__ == '__main__':
 
         experiment_config['max_num_samples'] = ns
         save_dir = pathlib.Path(args.save_dir) / f"{ns}-samples"
-        model, fitness = train_until_fit(experiment_config, 0.75 if ns != num_samples[-1] else 0.9, save_dir)
+        model, fitness = train_until_fit(experiment_config, 0.75 if ns != num_samples[-1] else 0.9, save_dir, model)
 
-        torch.save(model.state_dict(), save_dir/"trained.pytorch_model")
+        torch.save(model.state_dict(), save_dir/"trained_model.pytorch")
         print(f"Training with {ns} samples finished with fitness {fitness}")
         print("=" * 45)
         
