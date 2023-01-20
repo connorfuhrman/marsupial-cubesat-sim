@@ -27,6 +27,7 @@ import random
 from typing import TypedDict
 from enum import Enum, auto
 from pprint import pformat
+import random
 
 
 class Config(TypedDict):
@@ -137,21 +138,26 @@ class StatusBeacon:
 class ObservationSpace:
     """A cubesat agent's observation space."""
 
-    def __init__(self, mship: Mothership, craft_logger: logging.Logger):  # noqa D
+    def __init__(self, mship: Mothership, craft: CubeSat):  # noqa D
         self.state = dict()
-        self.mothership_pos = mship.position  # Assume stationary mothership
-        self.logger = logging.getLogger(craft_logger.name + ".observation_space")
+        self.mothership_pos = mship.position  # mothership is stationary
+        self.logger = logging.getLogger(craft.logger.name + ".observation_space")
+        self.cur_pos = craft.position
+        self.mothership_relative = self.relative_spherical(self.mothership_pos)
 
-    def update(self, m):
+    def update(self, m, craft: CubeSat):
         """Update the observation space.
 
         Updates the state knowledge given any new messages
         from the CubeSat.
         """
+        self.cur_pos = craft.position
+        self.mothership_relative = self.relative_spherical(self.mothership_pos)
         # TODO should I be cleaning up the states for craft that we've not heard from
         # in some period of time?
         if msgs.Message.is_type(m, msgs.CubeSatState):
             tx_id = m.msg['tx_id']
+            m.msg['position'] = self.relative_spherical(m.msg['position'])
             self.state[tx_id] = m.msg.copy()
             self.logger.debug("Updating state for craft %s. "
                               "Received state is: \n%s", tx_id, pformat(m.msg))
@@ -162,10 +168,30 @@ class ObservationSpace:
         else:
             raise ValueError("Unknown message type")
 
+    def relative_spherical(self, other_position: np.ndarray) -> np.ndarray:
+        """Convert other craft's position.
+
+        The other craft's position is reported as relative spherical coordiantes
+        from this craft's current position.
+        """
+        relative = other_position - self.cur_pos
+        x, y, z = relative
+
+        r = np.sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2))
+        theta = np.arctan(y/x)
+        phi = np.arccos(z/r)
+
+        return np.array([r, theta, phi])
+        
+
     def observations(self, time: float):
         """Return set of observations at the current time."""
-        return [(s['fuel_level'], s['sample_value'], time - s['timestamp'], *s['position'])
-                for s in self.state.values()]
+        # The 'position' key is changed to be relative to this cubesat's
+        # current position
+        obs = [(s['fuel_level'], s['sample_value'], time - s['timestamp'], *s['position'])
+               for s in self.state.values()]
+        random.shuffle(obs)
+        return obs
 
 
 class ActionSpace:
@@ -259,14 +285,21 @@ class ActionSpace:
 
     def _q_value(self, model, obs_space: ObservationSpace, craft: CubeSat, sim_time: float):
         if model is None:
+            raise RuntimeError("No model!")
             val = np.random.randint(low=0, high=len(ActionSpace.vals))
             return ActionSpace.vals(val)
         my_state_msg = craft.get_state_msg(sim_time)
-        my_state = (my_state_msg['fuel_level'], my_state_msg['sample_value'],
-                    0.0, *my_state_msg['position'])
+        # my_state = (my_state_msg['fuel_level'], my_state_msg['sample_value'],
+        #             0.0, *my_state_msg['position'])
         obs = obs_space.observations(sim_time)
-        obs.append(my_state)
-        return model.get_action(obs, obs_space.mothership_pos)
+        # obs.append(my_state)
+        if len(obs) == 0:
+            # print(f"WARNING: Craft {craft.id} has no observations at {sim_time}")
+            if sim_time > 60.0:
+                raise RuntimeError("Did not get any obs after 1 minute")
+            val = np.random.randint(low=0, high=len(ActionSpace.vals))
+            return ActionSpace.vals(val)
+        return model.get_action(obs, obs_space.mothership_relative)
 
     def _do_action(self, craft: CubeSat, mship: Mothership):
         """Perform the action in the action-space."""
@@ -354,7 +387,7 @@ class BennuParticleReturn(Simulation):
         self.initial_cubesat_ids = list(self.cubesats.keys())
         self.status_beacons = {c_id: StatusBeacon(self.config['transmission_freq'])
                                for c_id in self.cubesats.keys()}
-        self.obs_spaces = {c_id: ObservationSpace(self.single_mothership, c.logger)
+        self.obs_spaces = {c_id: ObservationSpace(self.single_mothership, c)
                            for c_id, c in self.cubesats.items()}
 
         def action_space(craft):
@@ -467,7 +500,7 @@ class BennuParticleReturn(Simulation):
                 do_others(m)
 
         for cs, tx_time, msg in self.cubesat_msg_iterator:
-            self.obs_spaces[cs.id].update(msg)
+            self.obs_spaces[cs.id].update(msg, cs)
 
     def _do_craft_action(self):
         """Query the action space for each agent.
