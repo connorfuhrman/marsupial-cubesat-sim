@@ -361,7 +361,7 @@ if __name__ == '__main__':
         'max_num_samples': 5,
         'simulation_config': {
             'timestep': 0.25,
-            'save_history': True,
+            'save_history': False,
             'mothership_config': [
                 {
                     'initial_position': np.array([0, 0, 0], dtype=float),
