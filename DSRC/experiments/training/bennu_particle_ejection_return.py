@@ -121,15 +121,22 @@ class Trainer:
         print(f"Fitness is calculated using {self.num_proc_per_fitness} procs")
         print(f"Optimizer uses {os.cpu_count() if (n := self.num_opt_procs) is None else n} procs")
         print(f"Number of available processor cores is {os.cpu_count()}")
-        print("="*45)
 
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = 'cpu'
 
         if checkpoint_fname is None:
+            print("Did not get existing GA checkpoint. Starting from scratch")
             self.ga_instace = self._new_ga_instance(num_solutions)
         else:
-            self.ga_instance = pygad.load(checkpoint_fname)
+            print(f"Got existing checkpoint at {checkpoint_fname}")
+            if self.initial_model is not None:
+                raise RuntimeError("Got both initial model and checkpoint. Specify only one")
+            # Remove the .pkl since PyGAD puts that automatically and send as a string since they
+            # use the + operator...
+            self.ga_instance = pygad.load(str(pathlib.Path(checkpoint_fname).absolute().with_suffix("")))
+
+        print("="*45)
 
         logger_name = "BennuParticleReturnTraining"
         logging_config = {
@@ -328,9 +335,9 @@ if __name__ == '__main__':
     parser.add_argument("--save_dir",
                         type=str,
                         default=None)
-    # parser.add_argument("--checkpoint_fname",
-    #                     type=str,
-    #                     default=None)
+    parser.add_argument("--checkpoint_fname",
+                        type=str,
+                        default=None)
     parser.add_argument("--model_weights",
                         type=str,
                         default=None,
@@ -391,7 +398,8 @@ if __name__ == '__main__':
                               num_solutions=args.num_solutions,
                               num_opt_procs=args.num_opt_procs,
                               num_experiments_per_fitness=args.num_experiments_per_fitness,
-                              num_proc_per_fitness=1)
+                              num_proc_per_fitness=1,
+                              checkpoint_fname=args.checkpoint_fname)
             model, fitness = trainer.run()
             if fitness >= 0.95 * req_fitness:
                 # Train until there are N succesful updates to the scenario 
