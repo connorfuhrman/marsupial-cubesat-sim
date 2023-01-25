@@ -378,7 +378,7 @@ if __name__ == '__main__':
             ],
             'cubesat_config': [
                 {
-                    'fuel_capacity': 175,
+                    'fuel_capacity': 250,
                     'sample_capture_prob': 0.85
                 },
             ]
