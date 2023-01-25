@@ -97,7 +97,7 @@ class ParticleDatabase:
         #     traj = np.array(self.random())
         pos_from_bennu = lambda: np.random.uniform(-5.0, 5.0, size=(3,))
         samples = [Sample(0.0, np.random.uniform(0.0, 10.0),
-                          (pos_from_bennu() - self.bennu_orig).copy(),
+                          (pos_from_bennu() + self.bennu_orig).copy(),
                           np.zeros(3))
                    for _ in range(num_particles)]
         return samples
@@ -163,7 +163,7 @@ class ObservationSpace:
                               "Received state is: \n%s", tx_id, pformat(m.msg))
         elif msgs.Message.is_type(m, msgs.CubeSatDocked):
             if (id := m.msg['id']) in self.state:
-                self.logger.debug("Craft %s is known to be docked.", id)
+                self.logger.info("Craft %s is known to be docked.", id)
                 del self.state[id]
         else:
             raise ValueError("Unknown message type")
@@ -367,7 +367,7 @@ class BennuParticleReturn(Simulation):
 
         pass
 
-    def __init__(self, config: Config, logger: logging.Logger = None):  # noqa D
+    def __init__(self, config: Config, controller_cls = ActionSpace, logger: logging.Logger = None):  # noqa D
         if logger is None:
             # Assume this is made within a Ray actor
             logging.basicConfig(level=logging.INFO)
@@ -391,10 +391,10 @@ class BennuParticleReturn(Simulation):
                            for c_id, c in self.cubesats.items()}
 
         def action_space(craft):
-            return ActionSpace(self.config['action_space_rate'],
-                               self.config['action_space_dock_dist'],
-                               self.config['action_space_waypoint_dist'],
-                               craft.logger)
+            return controller_cls(self.config['action_space_rate'],
+                                  self.config['action_space_dock_dist'],
+                                  self.config['action_space_waypoint_dist'],
+                                  craft.logger)
 
         self.action_spaces = {c_id: action_space(c)
                               for c_id, c in self.cubesats.items()}
@@ -413,6 +413,8 @@ class BennuParticleReturn(Simulation):
         self.total_num_actions = 0
 
         self.model = self.config['model']
+        if self.model == "expert_system":
+            self.logger.info("Running with expert system. No model provided")
         if self.model is None:
             self.logger.warning("Got no model. Will do random actions")
 
@@ -432,6 +434,7 @@ class BennuParticleReturn(Simulation):
                 mothership.dock_cubesat(c)
                 self.num_cubesats_recovered += 1
                 self.sample_value_recovered += c.sample_value
+                self._send_cs_docked_msg(c.id)
                 del self._crafts[c.id]
 
     def _is_terminated(self):
@@ -534,13 +537,25 @@ class BennuParticleReturn(Simulation):
 
         for cs in within_mship_range:
             for o in others(cs):
-                if (d := np.linalg.norm(cs.position - o.position)) <= 0.5:
+                if (d := np.linalg.norm(cs.position - o.position)) <= 1.0:
                     self.logger.info("Collision detected between craft %s at %s and "
                                          "craft %s at %s. They were %sm apart",
                                          cs.id, cs.position,
                                          o.id, o.position,
                                          d)
                     raise BennuParticleReturn.CollisionEvent
+
+    def _send_cs_docked_msg(self, id: str):
+        # Notify all other cubesats that a cubesat has docked
+        mship = self.single_mothership
+        for cs_id in self.cubesats:
+            if cs_id == id:
+                continue
+            msg = msgs.CubeSatDocked(tx_id = mship.id,
+                                     rx_id = cs_id,
+                                     timestamp = self.simtime,
+                                     id = id)
+            self._comms_manager.send_msg(msgs.Message(msg))
 
     def _calc_reward(self):
         # Calculate the reward for this step.

@@ -62,7 +62,8 @@ class Mothership(Spacecraft):
         """Dock the cubesat."""
         self._logger.debug("Cubesat %s docked", craft.id)
         self._logger.info(
-            "Cubesat docked with %s g of sample with value %s",
+            "Cubesat %s docked with %s g of sample with value %s",
+            craft.id,
             craft.sample_weight,
             sum([s.value for s in craft.samples]),
         )
