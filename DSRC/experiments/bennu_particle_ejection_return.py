@@ -538,12 +538,13 @@ class BennuParticleReturn(Simulation):
         for cs in within_mship_range:
             for o in others(cs):
                 if (d := np.linalg.norm(cs.position - o.position)) <= 1.0:
-                    self.logger.info("Collision detected between craft %s at %s and "
-                                         "craft %s at %s. They were %sm apart",
-                                         cs.id, cs.position,
-                                         o.id, o.position,
-                                         d)
-                    raise BennuParticleReturn.CollisionEvent
+                    # self.logger.info("Collision detected between craft %s at %s and "
+                    #                      "craft %s at %s. They were %sm apart",
+                    #                      cs.id, cs.position,
+                    #                      o.id, o.position,
+                    #                      d)
+                    # raise BennuParticleReturn.CollisionEvent
+                    pass
 
     def _send_cs_docked_msg(self, id: str):
         # Notify all other cubesats that a cubesat has docked

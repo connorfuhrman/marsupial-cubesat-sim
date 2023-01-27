@@ -5,10 +5,12 @@ from DSRC.experiments.bennu_particle_ejection_return import ObservationSpace
 from DSRC.experiments import BennuParticleReturn
 from DSRC.simulation.utils import save_json_file
 from DSRC.simulation import animate_simulation
+import multiprocessing as mp
 
 import logging
 import numpy as np
 from functools import cmp_to_key
+from functools import partial
 
 class ExpertSystem:
     def __init__(self, rate: float, min_dock_range: float, waypoint_dist: float,
@@ -17,16 +19,10 @@ class ExpertSystem:
         self.docking_order = []
         self.starting_fuel_level = 175  # magic number from config
         self.is_docking = False
+        self.period = 1.0/rate
+        self.next_update = 0.0
 
     def update(self, craft: CubeSat, mship: Mothership, sim_time: float, model, obs: ObservationSpace):
-        if craft.num_waypoints != 0:
-            if len(self.docking_order) == 0:
-                return
-            elif self.docking_order[0] == craft.id and not self.is_docking:
-                craft.clear_waypoints()
-            else:
-                return
-        
         if len(obs.state) == 0 and sim_time <= 60:
             # If the cubesat hasn't gotten any messages yet in 30 seconds then we do nothing
             self.logger.info("No observations yet. Moving randomly")
@@ -39,44 +35,35 @@ class ExpertSystem:
                               r * np.cos(phi)], dtype=float) + craft.position
             craft.add_waypoint(wypnt)
             return
-        
+
         self.do_docking_order(craft, obs, sim_time)
         self.logger.debug("Docking order is %s", self.docking_order)
+
+        if sim_time < self.next_update and self.docking_order[0] != craft.id:
+            return
+
+        self.next_update = sim_time + self.period
+        if self.is_docking:
+            return
 
         dist_to_mship = np.linalg.norm(craft.position - mship.position)
 
         if self.docking_order[0] == craft.id:
-            # If we are first up then move midway to the mothership
-            # unless we're already close enough
-            # self.logger.info("We're first up in the docking order")
-            if not self.is_docking:
-                # self.logger.info("Moving to dock with mothership")
-                craft.add_waypoint(mship.position)
-                self.is_docking = True
+            craft.add_waypoint(mship.position)
+            self.is_docking = True
         else:
-            if np.random.default_rng().uniform(low=0, high=1) <= 0.3:
-                # Move closer to the mothership
-                # self.logger.info("Moving halfway to the mothership but am not first up in docking order")
-                theta = np.random.default_rng().uniform(low=0, high=2.0*np.pi)
-                phi = np.random.default_rng().uniform(low=0, high=np.pi)
-                r = np.random.default_rng().uniform(low=3.0, high=7.0)
+            # Move closer to the mothership
+            theta = np.random.uniform(low=-1.0*np.pi, high=np.pi)
+            phi = np.random.uniform(low=-1.0*np.pi/2.0, high=np.pi/2.0)
+            r = np.random.uniform(low=7.0, high=10.0)
 
-                wypnt = np.array([r * np.cos(theta) * np.sin(phi),
-                                  r * np.sin(theta) * np.sin(phi),
-                                  r * np.cos(phi)], dtype=float) + mship.position
-                
-                craft.add_waypoint(wypnt)
-            else:
-                # Move randomly closeby to gain situational awareness
-                # self.logger.info("Moving randomly to gain SA")
-                theta = np.random.default_rng().uniform(low=0, high=2.0*np.pi)
-                phi = np.random.default_rng().uniform(low=0, high=np.pi)
-                r = 0.15
+            wypnt = np.array([r * np.cos(theta) * np.sin(phi),
+                              r * np.sin(theta) * np.sin(phi),
+                              r * np.cos(phi)], dtype=float) + mship.position
 
-                wypnt = np.array([r * np.cos(theta) * np.sin(phi),
-                                  r * np.sin(theta) * np.sin(phi),
-                                  r * np.cos(phi)], dtype=float) + craft.position
-                craft.add_waypoint(wypnt)
+            self.logger.debug("Moving to random position near mothership: %s",
+                              wypnt)
+            craft.add_waypoint(wypnt)
             
 
     def do_docking_order(self, craft: CubeSat, obs_space: ObservationSpace, sim_time):
@@ -89,7 +76,7 @@ class ExpertSystem:
             if state["fuel_level"] <= 25:
                 return 0
             
-            return 10.0 - state['sample_value']
+            return 10.0 - state['sample_value']  # 10 is magic number but is max sample value possible
 
         order = [i for i in obs_space.state.keys()]
         order.append(craft.id)
@@ -97,20 +84,31 @@ class ExpertSystem:
         
 
 
+def run_experiment(idx, experiment_config, logger):
+    # print(f"Running experiment {idx}")
+    experiment = BennuParticleReturn(experiment_config, ExpertSystem, logger)
+    experiment.run()
+    p_cubesats_recovered = experiment.num_cubesats_recovered/experiment.init_num_cubesats
+    p_sample_recovered = experiment.sample_value_recovered/experiment.max_sample_value
+    # print(f"Experiment {idx} concluded")
+    return (p_cubesats_recovered, p_sample_recovered)
+
+
 if __name__ == '__main__':
     import logging.config
     import sys
+    import os
     
     experiment_config = {
-        'bennu_pos': np.array([15, 15, 0]),
+        'bennu_pos': np.array([50, 0, 0]),
         'particle_database': None,
         'transmission_freq': 2.0,
         'action_space_rate': 1.0,
         'action_space_dock_dist': 25.0,
         'action_space_waypoint_dist': 2.5,
         'num_iters_calc_reward': 4,
-        'min_num_samples': 3,
-        'max_num_samples': 3,
+        'min_num_samples': 5,
+        'max_num_samples': 10,
         'model': "expert_system",
         'simulation_config': {
             'timestep': 0.25,
@@ -124,7 +122,7 @@ if __name__ == '__main__':
             ],
             'cubesat_config': [
                 {
-                    'fuel_capacity': 175,
+                    'fuel_capacity': 250,
                     'sample_capture_prob': 0.85
                 },
             ]
@@ -168,7 +166,17 @@ if __name__ == '__main__':
     logger = logging.getLogger(logger_name)
 
 
+   
+    # f = partial(run_experiment, experiment_config=experiment_config, logger=logger)
+    # with mp.Pool(os.cpu_count()) as p:
+    #     results = p.map(f, range(32))
+
+    # print("Results:")
+    # for r in results:
+    #     print(f"\t % cubesats recovered: {r[0]}. % sample value recovered: {r[1]}")
+
+
     experiment = BennuParticleReturn(experiment_config, ExpertSystem, logger)
     history = experiment.run()
-    save_json_file(history, "./experiment_results/history.json")
-    animate_simulation(history)
+    # save_json_file(history, "./experiment_results/history.json")
+    animate_simulation([history])
