@@ -132,7 +132,7 @@ class Spacecraft:
         if self.fuel_level is None:  # Unlimited fuel
             return True
         else:
-            self._fuel_level -= np.random.uniform(low=0.0, high=0.25)
+            self._fuel_level -= np.random.uniform(low=0.0, high=1.0 * dt)
             return self.fuel_level > 0.0
 
     def apply_rot_vel(self, rot_vel: np.ndarray) -> None:
